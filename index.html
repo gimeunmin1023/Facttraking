@@ -1,0 +1,1210 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FactTrace</title>
+<style>
+:root{
+  --bone:#F2F0EB; --ink:#14130F; --rule:rgba(20,19,15,.14);
+  --mute:rgba(20,19,15,.50); --faint:rgba(20,19,15,.06);
+  --flag:#A8321E; --ok:#2F5D42;
+  --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,"Times New Roman",serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bone:#111110; --ink:#E9E6DE; --rule:rgba(233,230,222,.16);
+    --mute:rgba(233,230,222,.52); --faint:rgba(233,230,222,.06);
+    --flag:#E0705A; --ok:#7FB093;
+  }
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--bone);color:var(--ink);font-family:var(--serif);
+  font-size:16px;line-height:1.5;-webkit-font-smoothing:antialiased}
+button,input,select,textarea{font:inherit;color:inherit;background:transparent;border:0}
+button{cursor:pointer}
+
+.lbl{font-family:var(--mono);font-size:10px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--mute)}
+
+#shell{display:grid;grid-template-columns:190px minmax(0,1fr);
+  max-width:1200px;margin:0 auto;min-height:100vh}
+
+/* nav */
+#nav{border-right:1px solid var(--rule);padding:34px 22px 34px 0;
+  position:sticky;top:0;align-self:start;height:100vh;
+  display:flex;flex-direction:column;gap:26px}
+#brand{font-size:19px;letter-spacing:-.02em}
+#brand small{display:block;margin-top:3px}
+#tabs{display:flex;flex-direction:column;gap:2px}
+#tabs button{text-align:left;padding:5px 0;font-family:var(--mono);font-size:10px;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--mute)}
+#tabs button[aria-selected=true]{color:var(--ink)}
+#tabs button .n{float:right;font-variant-numeric:tabular-nums}
+#navfoot{margin-top:auto;display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+#navfoot button{font-family:var(--mono);font-size:10px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--mute)}
+#navfoot button:hover{color:var(--ink)}
+
+/* main */
+#main{padding:34px 0 100px 34px;min-width:0}
+section[hidden]{display:none}
+h2{font-size:11px;font-family:var(--mono);letter-spacing:.14em;text-transform:uppercase;
+  color:var(--mute);font-weight:400;margin:0 0 16px}
+.row{display:flex;gap:14px;align-items:baseline;flex-wrap:wrap}
+.field{display:flex;flex-direction:column;gap:3px}
+.field select,.field input{border-bottom:1px solid var(--rule);padding:3px 0;min-width:74px}
+.field select:focus,.field input:focus{outline:none;border-bottom-color:var(--ink)}
+textarea{width:100%;min-height:230px;border:1px solid var(--rule);padding:16px;
+  font-size:17px;line-height:1.65;resize:vertical;background:var(--faint)}
+textarea:focus{outline:none;border-color:var(--ink)}
+.act{border:1px solid var(--ink);padding:8px 20px;font-family:var(--mono);font-size:10px;
+  letter-spacing:.14em;text-transform:uppercase}
+.act:hover{background:var(--ink);color:var(--bone)}
+.ghost{border:1px solid var(--rule);padding:5px 12px;font-family:var(--mono);font-size:10px;
+  letter-spacing:.12em;text-transform:uppercase;color:var(--mute)}
+.ghost:hover{border-color:var(--ink);color:var(--ink)}
+
+/* atoms */
+.atom{border-top:1px solid var(--rule);padding:16px 0}
+.atom:last-child{border-bottom:1px solid var(--rule)}
+.atom .head{display:flex;gap:12px;align-items:baseline}
+.atom .q{font-size:18px;margin:7px 0 11px;letter-spacing:-.01em}
+.atom .slots{display:flex;gap:9px;flex-wrap:wrap;align-items:center}
+.atom select,.atom input{border-bottom:1px solid var(--rule);padding:2px 0;
+  font-family:var(--mono);font-size:11px}
+.atom input[type=number]{width:52px;text-align:right}
+.atom .del{color:var(--mute);font-family:var(--mono);font-size:10px;margin-left:auto}
+.atom .del:hover{color:var(--flag)}
+.warn{color:var(--flag)}
+.tray{border:1px solid var(--flag);padding:14px 16px;margin-bottom:22px}
+.tray .r{display:flex;gap:10px;align-items:center;padding:5px 0;flex-wrap:wrap}
+
+/* conflicts */
+.cf{border-top:1px solid var(--rule);padding:18px 0}
+.cf:last-child{border-bottom:1px solid var(--rule)}
+.cf .top{display:flex;gap:11px;align-items:baseline;margin-bottom:11px}
+.badge{font-family:var(--mono);font-size:9px;letter-spacing:.12em;padding:2px 6px;
+  border:1px solid currentColor}
+.sev-hard{color:var(--flag)} .sev-med{color:var(--ink)} .sev-soft{color:var(--mute)}
+.cf .pair{display:grid;grid-template-columns:1fr 1fr;gap:26px}
+.cf .side{border-left:2px solid var(--rule);padding-left:13px}
+.cf .side.hot{border-left-color:var(--flag)}
+.cf .side p{margin:5px 0 0;font-size:16px}
+.cf .why{margin-top:11px;font-size:13px;color:var(--mute)}
+
+/* assess */
+.sp{border-top:1px solid var(--rule);padding:20px 0}
+.sp:last-of-type{border-bottom:1px solid var(--rule)}
+.sp .nm{font-size:26px;letter-spacing:-.02em;margin-bottom:12px}
+.axes{display:grid;grid-template-columns:repeat(5,1fr);gap:16px}
+.ax .v{font-size:26px;font-variant-numeric:tabular-nums;letter-spacing:-.02em;
+  line-height:1.05;margin:3px 0 5px}
+.bar{height:2px;background:var(--rule)}
+.bar i{display:block;height:2px;background:var(--ink)}
+.stage{font-family:var(--mono);font-size:9px;letter-spacing:.12em;color:var(--mute);
+  margin:18px 0 8px;text-transform:uppercase}
+#rank{margin-bottom:34px}
+.rk{display:grid;grid-template-columns:26px 1fr 74px;gap:14px;align-items:center;
+  padding:11px 0;border-top:1px solid var(--rule)}
+.rk .who{font-size:20px}
+.rk .sc{text-align:right;font-variant-numeric:tabular-nums;font-size:20px}
+.rk.top .who,.rk.top .sc{color:var(--flag)}
+.rk .ev{grid-column:2/4;font-size:13px;color:var(--mute);margin-top:-4px}
+.empty{color:var(--mute);font-size:15px;padding:22px 0}
+@media(max-width:820px){
+  #shell{grid-template-columns:1fr}
+  #nav{position:static;height:auto;border-right:0;border-bottom:1px solid var(--rule);
+    padding:22px 0;flex-direction:row;align-items:baseline;gap:20px;flex-wrap:wrap}
+  #tabs{flex-direction:row;gap:16px}#tabs button .n{float:none;margin-left:5px}
+  #navfoot{margin:0;flex-direction:row}
+  #main{padding:26px 0 80px}
+  .cf .pair{grid-template-columns:1fr}
+  .axes{grid-template-columns:repeat(2,1fr)}
+}
+</style>
+</head>
+<body>
+<div id="shell">
+  <nav id="nav">
+    <div id="brand">FactTrace<small class="lbl">진술 원자 분석</small></div>
+    <div id="tabs">
+      <button data-v="ingest" aria-selected="true">Ingest</button>
+      <button data-v="atoms" aria-selected="false">Atoms<span class="n" id="n-atoms">0</span></button>
+      <button data-v="conflict" aria-selected="false">Conflict<span class="n" id="n-cf">0</span></button>
+      <button data-v="assess" aria-selected="false">Assess</button>
+    </div>
+    <div id="navfoot">
+      <button id="b-import">Import</button>
+      <button id="b-export">Export</button>
+      <button id="b-sample">Sample</button>
+      <button id="b-clear">Clear</button>
+      <input type="file" id="f-import" accept="application/json" hidden>
+    </div>
+  </nav>
+
+  <main id="main">
+    <section id="v-ingest">
+      <h2>Ingest</h2>
+      <div class="row" style="margin-bottom:16px">
+        <label class="field"><span class="lbl">화자</span>
+          <input id="i-speaker" value="A" list="dl-speakers"></label>
+        <datalist id="dl-speakers"></datalist>
+        <label class="field"><span class="lbl">회차</span>
+          <select id="i-round"><option>1</option><option>2</option><option>3</option></select></label>
+        <label class="field"><span class="lbl">사건 길이 (초)</span>
+          <input id="i-dur" type="number" min="1" value="300"></label>
+        <label class="field"><span class="lbl">출처</span>
+          <select id="i-src"><option value="statement">진술</option><option value="evidence">물증</option></select></label>
+      </div>
+      <textarea id="i-text" placeholder="진술을 그대로 붙여넣으세요."></textarea>
+      <div class="row" style="margin-top:16px">
+        <button class="act" id="b-atomize">원자화</button>
+        <span class="lbl" id="i-note"></span>
+      </div>
+    </section>
+
+    <section id="v-atoms" hidden>
+      <h2>Atoms</h2>
+      <div id="tray"></div>
+      <div id="atoms"></div>
+    </section>
+
+    <section id="v-conflict" hidden>
+      <h2>Conflict</h2>
+      <div id="cflist"></div>
+    </section>
+
+    <section id="v-assess" hidden>
+      <h2>Assess</h2>
+      <div id="rank"></div>
+      <div id="scores"></div>
+    </section>
+  </main>
+</div>
+
+<script>
+/* ==FACTTRACE-ENGINE-START== */
+(function (root) {
+'use strict';
+
+/* ---------------------------------------------------------------- 1. 사전 */
+
+// 위치 포함 트리. parent 를 타고 올라가 조상-자손이면 같은 구역으로 본다.
+const LOCATION_SEED = {
+  L_ROOM   : { name:'연구실',        parent:null,     aliases:['연구실','방','실내','사무실','현장'] },
+  L_LEFT   : { name:'연구실 왼쪽',   parent:'L_ROOM', aliases:['연구실 왼쪽','왼쪽','좌측'] },
+  L_SHELF  : { name:'책장',          parent:'L_LEFT', aliases:['책장','서가','책꽂이','책장 앞','책장 쪽'] },
+  L_SHELF2 : { name:'책장 두 번째 칸',parent:'L_SHELF',aliases:['책장 두 번째 칸','두 번째 칸','둘째 칸','2번째 칸'] },
+  L_DESK   : { name:'교수 책상',     parent:'L_ROOM', aliases:['교수 책상','교수님 책상','책상','책상 쪽','책상 옆','책상 앞','데스크'] },
+  L_DRAWER : { name:'책상 서랍',     parent:'L_DESK', aliases:['책상 서랍','서랍','서랍 안','서랍장'] },
+  L_DESKTOP: { name:'책상 위',       parent:'L_DESK', aliases:['책상 위','상판'] },
+  L_WINDOW : { name:'창가',          parent:'L_ROOM', aliases:['창가','창문','창문 쪽','창 쪽','창측'] },
+  L_SOFA   : { name:'소파',          parent:'L_ROOM', aliases:['소파','소파 옆','소파 쪽'] },
+  L_CHAIR  : { name:'의자',          parent:'L_ROOM', aliases:['의자','의자 위','의자 앞','책상 맞은편'] },
+  L_CABINET: { name:'캐비닛',        parent:'L_ROOM', aliases:['캐비닛','사물함','보관함'] },
+  L_DOOR   : { name:'출입구',        parent:'L_ROOM', aliases:['연구실 출입구','출입구','출입문','현관','입구','문'] }
+};
+
+const ENTITY_SEED = [
+  { id:'E_MONEY',   canonical:'현금',      aliases:['현금','돈','지폐','봉투','돈봉투','현금 봉투','오만원권','만원권','현금다발'] },
+  { id:'E_FILE',    canonical:'논문 파일', aliases:['논문 파일','논문','파일','자료','서류'] },
+  { id:'E_BAG',     canonical:'가방',      aliases:['가방','백팩','배낭','에코백'] },
+  { id:'E_CHARGER', canonical:'충전기',    aliases:['충전기','어댑터','케이블'] },
+  { id:'E_BOX',     canonical:'개인 상자', aliases:['개인 상자','상자','박스'] },
+  { id:'E_DRAWER',  canonical:'책상 서랍', aliases:['책상 서랍','서랍','서랍장'] },
+  { id:'E_CHAIR',   canonical:'의자',      aliases:['의자'] },
+  { id:'E_DOOR',    canonical:'출입문',    aliases:['출입문','문'] },
+  { id:'E_LAPTOP',  canonical:'노트북',    aliases:['노트북','랩탑'] },
+  { id:'E_WALLET',  canonical:'지갑',      aliases:['지갑'] },
+  { id:'E_KEY',     canonical:'열쇠',      aliases:['열쇠','키','키카드','카드키'] }
+];
+
+// 뒤쪽(서술어 자리)에서 잡힌 것을 우선한다. prio 는 같은 위치에서 겹칠 때만 쓴다.
+const PREDICATES = [
+  { id:'은닉',     prio:13, re:/숨기|숨겼|숨겨|감췄|감추|묻었|은닉/ },
+  { id:'획득',     prio:12, re:/가져가|가져왔|가져오|챙겼|챙기|꺼냈|꺼내|집었|주웠|가방에\s*넣|주머니에\s*넣|획득/ },
+  { id:'개폐',     prio:11, re:/열었|열고|열어|닫았|닫고|닫아|잠갔|잠그|풀었/ },
+  { id:'접촉',     prio:10, re:/만졌|만지|만진|손대|손댔|건드렸|건드리|잡았|짚었/ },
+  { id:'퇴실',     prio:9,  re:/나왔|나갔|나오|나가|퇴실|빠져나/ },
+  { id:'입실',     prio:8,  re:/들어[가와오왔]|입실|들어섰/ },
+  { id:'이동',     prio:7,  re:/갔|왔|향했|향해|이동|옮겼|올라갔|내려갔|가지\s*않|오지\s*않|간\s*적/ },
+  { id:'접근',     prio:6,  re:/접근|다가|쪽으로|옆으로|앞으로|근처/ },
+  { id:'부재',     prio:5,  re:/없었|없더|안\s*보였|비어\s*있|비었|사라졌|텅/ },
+  { id:'목격',     prio:4,  re:/봤|보였|보이|목격|있었|있던|있는\s*걸|놓여|얹혀/ },
+  { id:'내려놓음', prio:3,  re:/내려놨|내려놓|놓았|놨|뒀|두었|올려놨|올려놓/ },
+  { id:'확인',     prio:2,  re:/확인|살펴|세어|세보|점검|훑어|들춰/ },
+  { id:'정리',     prio:1,  re:/정리|치웠|치우|원위치|제자리|밀었|밀어|닦았/ }
+];
+
+// 화자가 그 장소에 있었음을 함의하는 술어
+const PRESENCE = new Set(['이동','접근','접촉','개폐','획득','확인','정리','내려놓음','은닉','입실','퇴실']);
+// 그 자리에 있었는가 자체를 다투는 술어. "만지지 않았다"는 접촉의 부인이지
+// 그 자리에 없었다는 뜻이 아니므로 여기서 제외한다.
+const MOVEMENT = new Set(['이동','접근','입실','퇴실']);
+// 화자가 아니라 대상의 상태를 말하는 술어
+const STATEP   = new Set(['목격','부재']);
+
+const RE_NEG   = /않았|않는|않습니|않아|안\s*[갔봤했]|못\s*[갔봤했]|아닙|아니었|적\s*없|없습니다만/;
+const RE_HEDGE = /아마|같습니|같아요|같았|듯|기억이\s*안|기억이\s*잘|잘\s*모르|확실치|확실하지\s*않|아마도|인\s*것\s*같/;
+const RE_TIME  = /(\d{1,2})\s*[:분]\s*(\d{1,2})?\s*초?/;
+
+// 절 분리 지점. 한 문장 안의 서로 다른 행위를 갈라 준다.
+const CLAUSE_SPLITS = [
+  /\s*(?:그리고|그다음|그 다음|그러고|그런 다음|그 후에|그 뒤에|이후에)\s*/g,
+  /(?<=[가-힣])(?:ㄴ|은|한|는)\s*(?:다음|뒤|후)에?\s+/g,
+  /(?<=[가-힣])고\s+(?=[가-힣])/g,
+  /(?<=[가-힣])(?:면서|자마자|고서|다가|고는)\s+/g,
+  /(?<=[가-힣])(?:는데|지만|으나|나서)\s+/g
+];
+
+/* ------------------------------------------------------- 2. 한국어 정규화 */
+
+const PARTICLES = ['에서는','으로는','에게서','한테서','에서','에게','한테','으로','까지','부터','이랑','에는','께서','라고','이나','만을','만은','은','는','이','가','을','를','에','의','와','과','도','만','로','랑'];
+
+function nfc(s){ return String(s == null ? '' : s).normalize('NFC'); }
+
+function stripParticles(s){
+  let t = s.trim();
+  for (const p of PARTICLES){
+    if (t.length > p.length + 1 && t.endsWith(p)) { t = t.slice(0, -p.length); break; }
+  }
+  return t.trim();
+}
+
+function normKo(s){
+  let t = nfc(s).replace(/[“”"'‘’()\[\]]/g,' ').replace(/\s+/g,' ').trim();
+  t = t.replace(/(습니다|했습니다|였습니다|입니다|어요|아요|았다|었다|했다|한다)$/,'');
+  return stripParticles(t);
+}
+
+function bigrams(s){
+  const t = nfc(s).replace(/\s+/g,'');
+  if (t.length < 2) return t ? [t] : [];
+  const out = [];
+  for (let i = 0; i < t.length - 1; i++) out.push(t.slice(i, i+2));
+  return out;
+}
+
+function jaccard(a, b){
+  const A = new Set(bigrams(a)), B = new Set(bigrams(b));
+  if (!A.size || !B.size) return 0;
+  let inter = 0;
+  A.forEach(x => { if (B.has(x)) inter++; });
+  return inter / (A.size + B.size - inter);
+}
+
+/* ------------------------------------------------------------ 3. 위치 트리 */
+
+function ancestry(id, tree){
+  const chain = []; let cur = id, guard = 0;
+  while (cur && tree[cur] && guard++ < 32){ chain.push(cur); cur = tree[cur].parent; }
+  return chain;
+}
+function sameZone(a, b, tree){
+  if (!a || !b) return false;
+  if (a === b) return true;
+  return ancestry(a, tree).includes(b) || ancestry(b, tree).includes(a);
+}
+function disjointZone(a, b, tree){
+  if (!a || !b || a === b) return false;
+  return !sameZone(a, b, tree);
+}
+
+/* -------------------------------------------------------------- 4. 해소 */
+
+// 가장 긴 별칭이 이긴다. "책상 서랍" 이 "책상" 보다 먼저 잡히도록.
+function resolveLocation(text, tree){
+  const t = nfc(text);
+  let best = null;
+  for (const id in tree){
+    for (const a of tree[id].aliases){
+      const i = t.indexOf(a);
+      if (i >= 0 && (!best || a.length > best.len || (a.length === best.len && i > best.at)))
+        best = { id, len:a.length, at:i, surface:a };
+    }
+  }
+  return best;
+}
+
+function resolveEntity(text, reg){
+  const t = nfc(text);
+  let best = null;
+  for (const e of reg){
+    for (const a of e.aliases){
+      const i = t.indexOf(a);
+      if (i >= 0 && (!best || a.length > best.len)) best = { id:e.id, len:a.length, at:i, surface:a };
+    }
+  }
+  return best;
+}
+
+function suggestEntities(text, reg, k){
+  return reg
+    .map(e => ({ id:e.id, canonical:e.canonical,
+                 score: Math.max.apply(null, e.aliases.map(a => jaccard(text, a))) }))
+    .filter(x => x.score >= 0.34)
+    .sort((a,b) => b.score - a.score)
+    .slice(0, k || 3);
+}
+
+/* ------------------------------------------------------------ 5. 원자화 */
+
+function splitSentences(text){
+  return nfc(text)
+    .split(/(?<=[.!?…])\s+|\n+/)
+    .map(s => s.trim())
+    .filter(s => s.length > 1);
+}
+
+function splitClauses(sentence){
+  let parts = [sentence];
+  for (const re of CLAUSE_SPLITS){
+    const next = [];
+    for (const p of parts) next.push.apply(next, p.split(re));
+    parts = next;
+  }
+  return parts.map(s => (s || '').trim()).filter(s => s.length > 1);
+}
+
+// 서술어는 절의 뒤쪽에서 잡힌 것을 우선한다.
+function detectPredicate(clause){
+  const t = nfc(clause);
+  let best = null;
+  for (const p of PREDICATES){
+    const m = t.match(p.re);
+    if (!m) continue;
+    const at = m.index;
+    if (!best || at > best.at || (at === best.at && p.prio > best.prio))
+      best = { id:p.id, at, prio:p.prio };
+  }
+  return best ? best.id : null;
+}
+
+function detectActor(clause, speakers){
+  const t = nfc(clause);
+  for (const s of speakers){
+    const re = new RegExp('(?:^|[\\s,])' + s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + '\\s*(?:가|는|이|씨|님|은)');
+    if (re.test(t)) return s;
+  }
+  return null;
+}
+
+function atomize(text, ctx){
+  const tree = ctx.locations, reg = ctx.entities;
+  const speakers = (ctx.speakers || []).filter(s => s !== ctx.speaker);
+  const out = [];
+  splitSentences(text).forEach((sent, si) => {
+    const sid = 'S' + (si + 1);
+    splitClauses(sent).forEach(cl => {
+      const predicate = detectPredicate(cl);
+      const loc = resolveLocation(cl, tree);
+      const ent = resolveEntity(cl, reg);
+      const actor = detectActor(cl, speakers);
+      if (!predicate && !loc && !ent) return;             // 정보 없는 절은 버린다
+
+      let polarity = 'yes';
+      if (predicate !== '부재' && RE_NEG.test(cl)) polarity = 'no';
+
+      let kind;
+      if (actor) kind = 'observation';
+      else if (predicate && STATEP.has(predicate)) kind = 'state';
+      else if (polarity === 'no') kind = 'denial';
+      else kind = 'action';
+
+      const tm = cl.match(RE_TIME);
+      out.push({
+        id: null, speaker: ctx.speaker, round: ctx.round, parentSentenceId: sid,
+        quote: cl, kind, predicate: predicate || '',
+        entityId: ent ? ent.id : '', entityText: ent ? ent.surface : '',
+        locationId: loc ? loc.id : '', locationText: loc ? loc.surface : '',
+        actorId: actor || '',
+        startSec: null, endSec: null,
+        videoTime: tm ? tm[0] : '',
+        polarity,
+        modality: RE_HEDGE.test(cl) ? 'hedge' : 'assert',
+        scope: kind === 'denial' ? 'session' : 'interval',
+        sourceType: ctx.sourceType || 'statement',
+        verifiable: false, stateBefore: '', stateAfter: '',
+        unresolved: (!ent && /[가-힣]{2,}(?:을|를|이|가)/.test(cl)) ? (cl.match(/([가-힣]{2,})(?:을|를|이|가)/) || [])[1] || '' : ''
+      });
+    });
+  });
+  return out;
+}
+
+/* ---------------------------------------------------------- 6. 시간 구간 */
+
+function hasTime(c){ return c.startSec != null && c.endSec != null && c.endSec > c.startSec; }
+
+function overlapSec(a, b){
+  if (!hasTime(a) || !hasTime(b)) return 0;
+  return Math.max(0, Math.min(a.endSec, b.endSec) - Math.max(a.startSec, b.startSec));
+}
+function overlapRatio(a, b){
+  const ov = overlapSec(a, b);
+  if (!ov) return 0;
+  return ov / Math.min(a.endSec - a.startSec, b.endSec - b.startSec);
+}
+// 시간이 겹치거나, 한쪽이라도 세션 전체 주장이면 비교 대상이다.
+function comparable(a, b){
+  if (a.scope === 'session' || b.scope === 'session') return true;
+  if (!hasTime(a) || !hasTime(b)) return true;
+  return overlapSec(a, b) > 0;
+}
+function timeWeight(a, b){
+  if (a.scope === 'session' || b.scope === 'session') return 1;
+  if (!hasTime(a) || !hasTime(b)) return 0.6;            // 시간 미상은 감점된 확신
+  return Math.max(0.25, overlapRatio(a, b));
+}
+
+function mergeIntervals(list){
+  const iv = list.filter(hasTime).map(c => [c.startSec, c.endSec]).sort((x,y) => x[0]-y[0]);
+  const out = [];
+  for (const cur of iv){
+    const last = out[out.length - 1];
+    if (last && cur[0] <= last[1]) last[1] = Math.max(last[1], cur[1]);
+    else out.push([cur[0], cur[1]]);
+  }
+  return out;
+}
+function coverage(list, duration){
+  const merged = mergeIntervals(list);
+  const covered = merged.reduce((s, x) => s + (x[1] - x[0]), 0);
+  return { covered, gap: Math.max(0, duration - covered), merged };
+}
+
+/* ------------------------------------------------------------- 7. 규칙 */
+
+const BASE = { R1a:1.0, R1b:1.0, R2:1.0, R3:1.0, R4:0.9, R5:0.5, R6:0.5 };
+
+function assertsPresence(c){
+  return (c.kind === 'action') && c.locationId && PRESENCE.has(c.predicate) && c.polarity === 'yes';
+}
+function deniesPresence(c){
+  return (c.kind === 'denial') && c.locationId && c.polarity === 'no' &&
+         (MOVEMENT.has(c.predicate) || !c.predicate);
+}
+
+// blame — 이 모순의 책임을 화자별로 얼마나 지울지. 목격자를 목격했다는 이유로
+// 깎지 않기 위해 필요하다. 기본은 양쪽 동일.
+function mk(rule, a, b, why, tree, extra){
+  const evidence = a.sourceType === 'evidence' || b.sourceType === 'evidence';
+  let sev = BASE[rule] * timeWeight(a, b) * (evidence ? 2 : 1);
+  if (a.modality === 'hedge' || b.modality === 'hedge') sev *= 0.6;
+  sev = Math.round(sev * 100) / 100;
+  const blame = {}; blame[a.speaker] = 1; blame[b.speaker] = 1;
+  return Object.assign({
+    rule: evidence ? rule + '/R7' : rule,
+    severity: sev >= 0.8 ? 'hard' : sev >= 0.4 ? 'medium' : 'soft',
+    sev, a, b, why, blame,
+    speakers: Array.from(new Set([a.speaker, b.speaker])).sort()
+  }, extra || {});
+}
+
+function detectConflicts(claims, model){
+  const tree = model.locations, dur = model.duration;
+  const cs = claims.filter(c => c.approved !== false);
+  const found = [], seen = new Set();
+  const push = c => {
+    const k = c.rule + '|' + [c.a.id, c.b.id].sort().join('|');
+    if (seen.has(k)) return;
+    seen.add(k); found.push(c);
+  };
+
+  for (let i = 0; i < cs.length; i++){
+    for (let j = i + 1; j < cs.length; j++){
+      const a = cs[i], b = cs[j];
+      const same = a.speaker === b.speaker;
+      if (!comparable(a, b)) continue;
+
+      /* R1a 자기 위치 모순 — 술어가 달라도 '그 구역에 있었는가'로 비교한다 */
+      if (same){
+        const pairs = [[a,b],[b,a]];
+        for (const [x,y] of pairs){
+          if (deniesPresence(x) && assertsPresence(y) && sameZone(x.locationId, y.locationId, tree)){
+            push(mk('R1a', x, y,
+              (tree[x.locationId] ? tree[x.locationId].name : x.locationId) +
+              ' 구역에 대해 한쪽은 부인, 한쪽은 그 구역에서의 행위를 진술합니다.', tree));
+          }
+        }
+      }
+
+      /* R1b 자기 극성 반전 — 같은 술어·같은 대상에 대한 예/아니오 뒤집힘 */
+      if (same && a.predicate && a.predicate === b.predicate && a.polarity !== b.polarity){
+        const target = (a.entityId && a.entityId === b.entityId) ? 'entity'
+                     : (sameZone(a.locationId, b.locationId, tree) ? 'zone' : null);
+        if (target) push(mk('R1b', a, b, '동일한 대상에 대한 ‘' + a.predicate + '’ 진술의 극성이 뒤집혔습니다.', tree));
+      }
+
+      /* R4 물리 불가 — 같은 사람이 겹치는 시각에 서로 떨어진 구역에 */
+      if (same && assertsPresence(a) && assertsPresence(b) &&
+          disjointZone(a.locationId, b.locationId, tree) &&
+          hasTime(a) && hasTime(b) && overlapSec(a, b) >= 5){
+        push(mk('R4', a, b, '겹치는 시각에 서로 떨어진 두 구역에 있었다고 진술합니다.', tree));
+      }
+
+      /* R2 교차 화자 위치 모순 — 같은 물건을 서로 다른 구역에 둔다 */
+      if (!same && a.kind === 'state' && b.kind === 'state' &&
+          a.polarity === 'yes' && b.polarity === 'yes' &&
+          a.entityId && a.entityId === b.entityId &&
+          disjointZone(a.locationId, b.locationId, tree)){
+        push(mk('R2', a, b,
+          '같은 대상의 위치를 서로 다르게 진술합니다: ' +
+          (tree[a.locationId] ? tree[a.locationId].name : a.locationId) + ' ↔ ' +
+          (tree[b.locationId] ? tree[b.locationId].name : b.locationId), tree));
+      }
+
+      /* R3 교차 화자 행위 모순 — 목격 진술 대 당사자 진술 */
+      if (!same){
+        const pairs = [[a,b],[b,a]];
+        for (const [obs, own] of pairs){
+          if (obs.kind !== 'observation' || obs.actorId !== own.speaker || obs.polarity !== 'yes') continue;
+
+          // 목격한 쪽이 아니라 지목당한 쪽에 책임을 싣는다
+          const witnessBlame = c => { c.blame[obs.speaker] = 0.3; c.blame[own.speaker] = 1; return c; };
+
+          if (obs.locationId && deniesPresence(own) && sameZone(obs.locationId, own.locationId, tree)){
+            push(witnessBlame(mk('R3', obs, own,
+              obs.speaker + '는 ' + own.speaker + '가 그 구역에 있었다고 진술하지만 본인은 부인합니다.', tree)));
+          }
+          if (obs.locationId && assertsPresence(own) &&
+              disjointZone(obs.locationId, own.locationId, tree) &&
+              hasTime(obs) && hasTime(own) && overlapSec(obs, own) >= 5){
+            push(witnessBlame(mk('R3', obs, own,
+              '같은 시각에 대해 목격 위치와 본인 진술 위치가 서로 떨어져 있습니다.', tree)));
+          }
+          if (obs.predicate && obs.predicate === own.predicate &&
+              obs.entityId && obs.entityId === own.entityId && own.polarity === 'no'){
+            push(witnessBlame(mk('R3', obs, own,
+              '‘' + obs.predicate + '’ 행위에 대해 목격과 본인 진술이 반대입니다.', tree)));
+          }
+        }
+      }
+    }
+  }
+
+  /* R2 다수결 책임 배분 — 같은 물건에 대해 다수가 합의한 위치를 말한 화자는 덜 깎는다 */
+  const r2 = found.filter(c => c.rule.indexOf('R2') === 0);
+  if (r2.length){
+    const tally = {};   // entityId -> locationId -> Set(speaker)
+    cs.filter(c => c.kind === 'state' && c.polarity === 'yes' && c.entityId && c.locationId)
+      .forEach(c => {
+        const t = tally[c.entityId] = tally[c.entityId] || {};
+        (t[c.locationId] = t[c.locationId] || new Set()).add(c.speaker);
+      });
+    r2.forEach(c => {
+      const t = tally[c.a.entityId] || {};
+      const size = l => (t[l] ? t[l].size : 0);
+      const top = Math.max.apply(null, Object.keys(t).map(size).concat([0]));
+      [c.a, c.b].forEach(x => { c.blame[x.speaker] = size(x.locationId) >= top && top > 1 ? 0.3 : 1; });
+    });
+  }
+
+  /* R5 상태 전이 위반 */
+  const byEntity = {};
+  cs.filter(c => c.entityId && (c.stateBefore || c.stateAfter))
+    .forEach(c => { (byEntity[c.entityId] = byEntity[c.entityId] || []).push(c); });
+  for (const eid in byEntity){
+    const seq = byEntity[eid].slice().sort((x,y) => (x.startSec ?? 0) - (y.startSec ?? 0));
+    for (let i = 0; i < seq.length - 1; i++){
+      const cur = seq[i], nxt = seq[i+1];
+      if (cur.stateAfter && nxt.stateBefore && normKo(cur.stateAfter) !== normKo(nxt.stateBefore)){
+        found.push(mk('R5', cur, nxt,
+          '‘' + cur.stateAfter + '’ 이후 ‘' + nxt.stateBefore + '’ 로 바뀌는 과정이 진술되지 않았습니다.', tree));
+      }
+    }
+  }
+
+  /* R6 미설명 시간 */
+  const bySpeaker = {};
+  cs.forEach(c => { (bySpeaker[c.speaker] = bySpeaker[c.speaker] || []).push(c); });
+  const gaps = {};
+  for (const sp in bySpeaker){
+    const timed = bySpeaker[sp].filter(hasTime);
+    if (!timed.length){ gaps[sp] = 0; continue; }
+    const cov = coverage(timed, dur);
+    gaps[sp] = cov.gap;
+    if (cov.gap > 0){
+      const sev = Math.min(1, cov.gap / Math.max(1, dur) * 3);
+      found.push({
+        rule:'R6', severity: cov.gap > 60 ? 'hard' : 'medium',
+        sev: Math.round(sev * 100) / 100,
+        a: timed[0], b: timed[timed.length - 1], speakers:[sp],
+        why: dur + '초 중 ' + cov.gap + '초가 어떤 진술로도 채워지지 않았습니다.',
+        gapOnly: true
+      });
+    }
+  }
+
+  found.sort((x, y) => y.sev - x.sev);
+  return { conflicts: found, gaps };
+}
+
+/* ------------------------------------------------------------- 8. 점수 */
+
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+const r1 = v => Math.round(v * 10) / 10;
+
+function keyOf(c){ return (c.predicate || '?') + '·' + (c.entityId || c.locationId || '?'); }
+
+function unity(claims){
+  const r1c = claims.filter(c => c.round === 1);
+  const r2c = claims.filter(c => c.round > 1);
+  const m1 = new Map(); r1c.forEach(c => m1.set(keyOf(c), c));
+  let reversed = 0, added = 0;
+  const ev = [];
+  r2c.forEach(c => {
+    const p = m1.get(keyOf(c));
+    if (!p) { added++; ev.push(c.id); }
+    else if (p.polarity !== c.polarity) { reversed++; ev.push(c.id, p.id); }
+  });
+  const total = Math.max(1, m1.size + added);
+  return { score: clamp(100 - 100 * (reversed * 2 + added * 0.5) / total, 0, 100),
+           reversed, added, evidence: ev };
+}
+
+function scoreSpeaker(sp, claims, conflicts, model){
+  const mine = claims.filter(c => c.speaker === sp && c.approved !== false);
+  const n = Math.max(1, mine.length);
+  const dur = model.duration;
+
+  // 객관성 — 추측·전언의 비율
+  const hedge = mine.filter(c => c.modality === 'hedge').length / n;
+  const infer = mine.filter(c => c.kind === 'observation' && c.modality === 'hedge').length / n;
+  const O = clamp(100 * (1 - hedge * 0.6 - infer * 0.4), 0, 100);
+
+  // 일관성 — 내부 모순의 심각도 합
+  const internal = conflicts.filter(c => !c.gapOnly && c.speakers.length === 1 && c.speakers[0] === sp);
+  const iSum = internal.reduce((s, c) => s + c.sev, 0);
+  const C = clamp(100 * Math.exp(-iSum / 3), 0, 100);
+
+  // 통일성 — 회차 간 유지율 (가장 무겁게 본다)
+  const U = unity(mine);
+
+  // 구체성 — 슬롯 충족 · 검증 가능성 · 시간 정밀도
+  const slotFill = mine.reduce((s, c) => {
+    let f = 0;
+    if (c.predicate) f++; if (c.entityId) f++; if (c.locationId) f++;
+    if (hasTime(c)) f++; if (c.quote) f++;
+    return s + f / 5;
+  }, 0) / n;
+  const verif = mine.filter(c => c.verifiable).length / n;
+  const timed = mine.filter(hasTime);
+  const meanLen = timed.length ? timed.reduce((s,c) => s + (c.endSec - c.startSec), 0) / timed.length : dur;
+  const prec = clamp(1 - meanLen / Math.max(1, dur), 0, 1) * (timed.length / n);
+  const S = clamp(100 * (slotFill * 0.4 + verif * 0.3 + prec * 0.3), 0, 100);
+
+  // 개연성 — 타 화자·물증과의 충돌
+  const cross = conflicts.filter(c => !c.gapOnly && c.speakers.length > 1 && c.speakers.indexOf(sp) >= 0);
+  const phys  = internal.filter(c => c.rule.indexOf('R4') === 0);
+  const blameOf = c => (c.blame && c.blame[sp] != null) ? c.blame[sp] : 1;
+  const xSum = cross.reduce((s, c) => s + c.sev * blameOf(c), 0)
+             + phys.reduce((s, c) => s + c.sev * 0.5, 0);
+  const P = clamp(100 * Math.exp(-xSum / 2.5), 0, 100);
+
+  const gapSec = (model.gaps && model.gaps[sp]) || 0;
+  const gapPen = clamp(100 * gapSec / Math.max(1, dur), 0, 100);
+
+  const raw = 2.0 * (100 - U.score) + 1.5 * (100 - C) + 1.5 * (100 - P)
+            + 1.0 * gapPen + 1.0 * (100 - S) + 0.5 * (100 - O);
+  const suspicion = clamp(raw / 8.5, 0, 100);
+
+  const evidence = conflicts
+    .filter(c => c.speakers.indexOf(sp) >= 0 && (c.gapOnly || blameOf(c) >= 0.5))
+    .sort((x, y) => y.sev * (y.gapOnly ? 1 : blameOf(y)) - x.sev * (x.gapOnly ? 1 : blameOf(x)))
+    .slice(0, 3)
+    .map(c => c.gapOnly ? c.rule + ' ' + c.why : c.rule + ' ' + c.a.id + '↔' + c.b.id);
+
+  return {
+    speaker: sp, n: mine.length,
+    stage1: { objectivity: r1(O), consistency: r1(C), unity: r1(U.score) },
+    stage2: { specificity: r1(S), plausibility: r1(P) },
+    gapSec, reversed: U.reversed, added: U.added,
+    hard: conflicts.filter(c => c.severity === 'hard' && c.speakers.indexOf(sp) >= 0).length,
+    suspicion: r1(suspicion),
+    evidence
+  };
+}
+
+function analyze(claims, model){
+  const m = Object.assign({ locations: LOCATION_SEED, entities: ENTITY_SEED, duration: 300 }, model || {});
+  const det = detectConflicts(claims, m);
+  m.gaps = det.gaps;
+  const speakers = Array.from(new Set(claims.map(c => c.speaker))).sort();
+  const scores = speakers.map(sp => scoreSpeaker(sp, claims, det.conflicts, m));
+  scores.sort((a, b) => b.suspicion - a.suspicion);
+  return { conflicts: det.conflicts, gaps: det.gaps, scores, speakers };
+}
+
+/* ---------------------------------------------- 9. 구버전 JSON 하위 호환 */
+
+function upgradeClaim(c, model){
+  if (c.kind && c.predicate !== undefined) return c;          // 이미 신형
+  const tree = model.locations, reg = model.entities;
+  const src = [c.action, c.object, c.location, c.quote].filter(Boolean).join(' ');
+  const predicate = detectPredicate(c.action || c.quote || '') || detectPredicate(src) || '';
+  const loc = c.location ? resolveLocation(c.location, tree) : resolveLocation(c.quote || '', tree);
+  const ent = c.object ? resolveEntity(c.object, reg) : resolveEntity(c.quote || '', reg);
+  const polarity = c.polarity || 'yes';
+  let kind;
+  if (STATEP.has(predicate)) kind = 'state';
+  else if (polarity === 'no') kind = 'denial';
+  else kind = 'action';
+  return Object.assign({}, c, {
+    kind, predicate,
+    entityId: ent ? ent.id : '', entityText: c.object || (ent ? ent.surface : ''),
+    locationId: loc ? loc.id : '', locationText: c.location || (loc ? loc.surface : ''),
+    actorId: '', modality: RE_HEDGE.test(c.quote || '') ? 'hedge' : 'assert',
+    scope: kind === 'denial' ? 'session' : 'interval',
+    startSec: c.startSec ?? null, endSec: c.endSec ?? null,
+    parentSentenceId: c.parentSentenceId || ''
+  });
+}
+
+/* ------------------------------------------------------------ 10. 자가검증 */
+
+function selftest(){
+  const T = [];
+  const ok = (name, cond) => T.push({ name, pass: !!cond });
+  const M = { locations: LOCATION_SEED, entities: ENTITY_SEED, duration: 300 };
+  const C = (o, i) => Object.assign({
+    id:'X'+i, speaker:'A', round:1, quote:'', kind:'action', predicate:'', entityId:'',
+    locationId:'', actorId:'', startSec:null, endSec:null, polarity:'yes',
+    modality:'assert', scope:'interval', sourceType:'statement', verifiable:false,
+    stateBefore:'', stateAfter:'', approved:true
+  }, o);
+
+  // 정규화 4
+  ok('normKo 조사·어미 절단', normKo('책상 쪽에는') === '책상 쪽' && normKo('갔습니다') === '갔');
+  ok('위치 최장일치', resolveLocation('책상 서랍을 열었다', LOCATION_SEED).id === 'L_DRAWER');
+  ok('개체 별칭 병합', resolveEntity('봉투를 봤다', ENTITY_SEED).id === 'E_MONEY');
+  ok('구역 포함관계', sameZone('L_DRAWER','L_DESK',LOCATION_SEED) && disjointZone('L_WINDOW','L_DESK',LOCATION_SEED));
+
+  // 절 분해 + 서술어 위치 우선
+  const at = atomize('책상 옆에서 잠깐 가방을 정리한 다음 창가로 갔습니다.',
+                     { speaker:'B', round:2, locations:LOCATION_SEED, entities:ENTITY_SEED, speakers:['A','B'] });
+  ok('절 분해로 원자 2개', at.length === 2 && at[0].locationId === 'L_DESK' && at[1].locationId === 'L_WINDOW');
+  ok('서술어는 뒤쪽 우선', detectPredicate('나오기 직전에 의자를 원래 위치로 밀었습니다') === '정리');
+
+  // R1a
+  let r = detectConflicts([
+    C({ id:'a1', kind:'denial', predicate:'이동', locationId:'L_DESK', polarity:'no', scope:'session' },1),
+    C({ id:'a2', kind:'action', predicate:'정리', locationId:'L_DESK', startSec:70, endSec:120 },2)
+  ], M);
+  ok('R1a 자기 위치 모순', r.conflicts.some(c => c.rule.indexOf('R1a') === 0));
+
+  // R1b
+  r = detectConflicts([
+    C({ id:'b1', predicate:'접촉', entityId:'E_DRAWER', polarity:'yes', scope:'session' },1),
+    C({ id:'b2', kind:'denial', predicate:'접촉', entityId:'E_DRAWER', polarity:'no', scope:'session' },2)
+  ], M);
+  ok('R1b 극성 반전', r.conflicts.some(c => c.rule.indexOf('R1b') === 0));
+
+  // R2 — 이번 재구축의 핵심
+  r = detectConflicts([
+    C({ id:'m1', speaker:'A', kind:'state', predicate:'목격', entityId:'E_MONEY', locationId:'L_DRAWER', scope:'session' },1),
+    C({ id:'m2', speaker:'B', kind:'state', predicate:'목격', entityId:'E_MONEY', locationId:'L_DESKTOP', scope:'session' },2),
+    C({ id:'m3', speaker:'C', kind:'state', predicate:'목격', entityId:'E_MONEY', locationId:'L_SOFA',    scope:'session' },3)
+  ], M);
+  ok('R2 교차 화자 위치 모순 3쌍', r.conflicts.filter(c => c.rule.indexOf('R2') === 0).length === 3);
+
+  // R3
+  r = detectConflicts([
+    C({ id:'o1', speaker:'C', kind:'observation', actorId:'B', predicate:'접근', locationId:'L_DESK', scope:'session' },1),
+    C({ id:'o2', speaker:'B', kind:'denial', predicate:'이동', locationId:'L_DESK', polarity:'no', scope:'session' },2)
+  ], M);
+  ok('R3 목격 대 부인', r.conflicts.some(c => c.rule.indexOf('R3') === 0));
+
+  // R4
+  r = detectConflicts([
+    C({ id:'p1', predicate:'확인', locationId:'L_WINDOW', startSec:60, endSec:120 },1),
+    C({ id:'p2', predicate:'접촉', locationId:'L_DESK',   startSec:90, endSec:150 },2)
+  ], M);
+  ok('R4 물리 불가', r.conflicts.some(c => c.rule.indexOf('R4') === 0));
+
+  // R5
+  r = detectConflicts([
+    C({ id:'s1', predicate:'개폐', entityId:'E_BOX', startSec:10, endSec:20, stateBefore:'상자 열림', stateAfter:'상자 닫힘' },1),
+    C({ id:'s2', predicate:'확인', entityId:'E_BOX', startSec:40, endSec:50, stateBefore:'상자 열림', stateAfter:'상자 닫힘' },2)
+  ], M);
+  ok('R5 상태 전이 위반', r.conflicts.some(c => c.rule === 'R5'));
+
+  // R6 — 데모 JSON 의 B 와 같은 값(50초)이 나와야 한다
+  r = detectConflicts([
+    C({ speaker:'B', id:'g1', startSec:0,   endSec:50  },1),
+    C({ speaker:'B', id:'g2', startSec:50,  endSec:130 },2),
+    C({ speaker:'B', id:'g3', startSec:130, endSec:205 },3),
+    C({ speaker:'B', id:'g4', startSec:255, endSec:300 },4),
+    C({ speaker:'B', id:'g5', startSec:70,  endSec:120 },5),
+    C({ speaker:'B', id:'g6', startSec:95,  endSec:115 },6)
+  ], M);
+  ok('R6 미설명 50초 회귀', r.gaps.B === 50);
+
+  // R7 물증 가중
+  r = detectConflicts([
+    C({ id:'e1', kind:'denial', predicate:'이동', locationId:'L_DESK', polarity:'no', scope:'session' },1),
+    C({ id:'e2', kind:'action', predicate:'접근', locationId:'L_DESK', scope:'session', sourceType:'evidence' },2)
+  ], M);
+  ok('R7 물증 가중 2배', r.conflicts.some(c => c.rule.indexOf('/R7') > 0 && c.sev >= 1.9));
+
+  const pass = T.filter(t => t.pass).length;
+  T.forEach(t => console.log((t.pass ? 'PASS  ' : 'FAIL  ') + t.name));
+  console.log(pass + '/' + T.length + ' passed');
+  return { pass, total: T.length, results: T };
+}
+
+root.FT = {
+  LOCATION_SEED, ENTITY_SEED, PREDICATES, PRESENCE, STATEP,
+  normKo, jaccard, bigrams,
+  sameZone, disjointZone, ancestry,
+  resolveLocation, resolveEntity, suggestEntities,
+  splitSentences, splitClauses, detectPredicate, detectActor, atomize,
+  hasTime, overlapSec, overlapRatio, coverage,
+  detectConflicts, scoreSpeaker, analyze, upgradeClaim, selftest
+};
+})(typeof window !== 'undefined' ? window : globalThis);
+/* ==FACTTRACE-ENGINE-END== */
+</script>
+
+<script>
+/* ============================== UI ============================== */
+(function () {
+'use strict';
+const $ = s => document.querySelector(s);
+const el = (t, c, x) => { const n = document.createElement(t); if (c) n.className = c; if (x != null) n.textContent = x; return n; };
+const esc = s => String(s == null ? '' : s);
+
+const KEY = 'facttrace.v2';
+const state = {
+  claims: [],
+  duration: 300,
+  locations: JSON.parse(JSON.stringify(FT.LOCATION_SEED)),
+  entities: JSON.parse(JSON.stringify(FT.ENTITY_SEED)),
+  view: 'ingest',
+  seq: 0
+};
+
+/* ---- persistence ---- */
+function save(){
+  try { localStorage.setItem(KEY, JSON.stringify({
+    claims: state.claims, duration: state.duration, entities: state.entities, seq: state.seq
+  })); } catch (e) {}
+}
+function load(){
+  try {
+    const raw = localStorage.getItem(KEY); if (!raw) return;
+    const d = JSON.parse(raw);
+    state.claims = d.claims || []; state.duration = d.duration || 300;
+    state.entities = d.entities || state.entities; state.seq = d.seq || state.claims.length;
+  } catch (e) {}
+}
+
+function model(){ return { locations: state.locations, entities: state.entities, duration: state.duration }; }
+function nextId(sp){
+  const n = state.claims.filter(c => c.speaker === sp).length + 1;
+  return sp + n;
+}
+function speakers(){ return Array.from(new Set(state.claims.map(c => c.speaker))).sort(); }
+
+/* ---- routing ---- */
+function show(v){
+  state.view = v;
+  document.querySelectorAll('#tabs button').forEach(b => b.setAttribute('aria-selected', String(b.dataset.v === v)));
+  ['ingest','atoms','conflict','assess'].forEach(k => { $('#v-' + k).hidden = (k !== v); });
+  render();
+}
+
+/* ---- render ---- */
+let cache = null;
+function recompute(){ cache = FT.analyze(state.claims, model()); return cache; }
+
+function render(){
+  const a = recompute();
+  $('#n-atoms').textContent = state.claims.length;
+  $('#n-cf').textContent = a.conflicts.length;
+  $('#dl-speakers').innerHTML = speakers().map(s => '<option value="' + esc(s) + '">').join('');
+  if (state.view === 'atoms') renderAtoms();
+  if (state.view === 'conflict') renderConflicts(a);
+  if (state.view === 'assess') renderAssess(a);
+  save();
+}
+
+const OPT = {
+  kind: [['action','행위'],['state','상태'],['observation','목격'],['denial','부인']],
+  polarity: [['yes','예'],['no','아니오']],
+  modality: [['assert','단정'],['hedge','추측']],
+  scope: [['interval','구간'],['session','전체']],
+  sourceType: [['statement','진술'],['evidence','물증']]
+};
+function sel(cls, val, pairs, on){
+  const s = el('select', cls);
+  pairs.forEach(p => {
+    const o = el('option', null, p[1]); o.value = p[0];
+    if (String(val) === String(p[0])) o.selected = true;
+    s.appendChild(o);
+  });
+  s.onchange = () => on(s.value);
+  return s;
+}
+
+function renderAtoms(){
+  const tray = $('#tray'); tray.innerHTML = '';
+  const un = state.claims.filter(c => c.unresolved && !c.entityId);
+  if (un.length){
+    const box = el('div','tray');
+    box.appendChild(el('div','lbl','미해결 개체 ' + un.length));
+    un.forEach(c => {
+      const r = el('div','r');
+      r.appendChild(el('span', null, '“' + c.unresolved + '”'));
+      FT.suggestEntities(c.unresolved, state.entities, 3).forEach(s => {
+        const b = el('button','ghost', s.canonical + ' ' + Math.round(s.score * 100) + '%');
+        b.onclick = () => { c.entityId = s.id; c.entityText = c.unresolved; c.unresolved = ''; render(); };
+        r.appendChild(b);
+      });
+      const nb = el('button','ghost','새 개체');
+      nb.onclick = () => {
+        const id = 'E_U' + (++state.seq);
+        state.entities.push({ id, canonical: c.unresolved, aliases: [c.unresolved] });
+        c.entityId = id; c.entityText = c.unresolved; c.unresolved = ''; render();
+      };
+      const sk = el('button','ghost','건너뜀');
+      sk.onclick = () => { c.unresolved = ''; render(); };
+      r.appendChild(nb); r.appendChild(sk);
+      box.appendChild(r);
+    });
+    tray.appendChild(box);
+  }
+
+  const host = $('#atoms'); host.innerHTML = '';
+  if (!state.claims.length){ host.appendChild(el('div','empty','원자가 없습니다.')); return; }
+
+  state.claims.slice().sort((x,y) =>
+    x.speaker.localeCompare(y.speaker) || x.round - y.round ||
+    ((x.startSec ?? 1e9) - (y.startSec ?? 1e9))
+  ).forEach(c => {
+    const n = el('div','atom');
+    const h = el('div','head');
+    h.appendChild(el('span','lbl', c.id + ' · ' + c.speaker + ' · ' + c.round + '차'));
+    if (!FT.hasTime(c)) h.appendChild(el('span','lbl warn','시간 미지정'));
+    const del = el('button','del','삭제');
+    del.onclick = () => { state.claims = state.claims.filter(x => x !== c); render(); };
+    h.appendChild(del);
+    n.appendChild(h);
+    n.appendChild(el('div','q', c.quote));
+
+    const s = el('div','slots');
+    s.appendChild(sel(null, c.kind, OPT.kind, v => { c.kind = v; render(); }));
+
+    const pr = el('select');
+    [''].concat(FT.PREDICATES.map(p => p.id)).forEach(p => {
+      const o = el('option', null, p || '술어 없음'); o.value = p;
+      if (c.predicate === p) o.selected = true; pr.appendChild(o);
+    });
+    pr.onchange = () => { c.predicate = pr.value; render(); };
+    s.appendChild(pr);
+
+    const en = el('select');
+    [{id:'',canonical:'대상 없음'}].concat(state.entities).forEach(e => {
+      const o = el('option', null, e.canonical); o.value = e.id;
+      if (c.entityId === e.id) o.selected = true; en.appendChild(o);
+    });
+    en.onchange = () => { c.entityId = en.value; render(); };
+    s.appendChild(en);
+
+    const lo = el('select');
+    const lopts = [['', '장소 없음']].concat(Object.keys(state.locations).map(k => [k, state.locations[k].name]));
+    lopts.forEach(p => {
+      const o = el('option', null, p[1]); o.value = p[0];
+      if (c.locationId === p[0]) o.selected = true; lo.appendChild(o);
+    });
+    lo.onchange = () => { c.locationId = lo.value; render(); };
+    s.appendChild(lo);
+
+    if (c.kind === 'observation'){
+      const ac = el('select');
+      [''].concat(speakers()).forEach(sp => {
+        const o = el('option', null, sp ? sp + ' 관찰' : '대상 없음'); o.value = sp;
+        if (c.actorId === sp) o.selected = true; ac.appendChild(o);
+      });
+      ac.onchange = () => { c.actorId = ac.value; render(); };
+      s.appendChild(ac);
+    }
+
+    s.appendChild(sel(null, c.polarity, OPT.polarity, v => { c.polarity = v; render(); }));
+    s.appendChild(sel(null, c.modality, OPT.modality, v => { c.modality = v; render(); }));
+    s.appendChild(sel(null, c.scope, OPT.scope, v => { c.scope = v; render(); }));
+    s.appendChild(sel(null, c.sourceType, OPT.sourceType, v => { c.sourceType = v; render(); }));
+
+    [['startSec','시작'],['endSec','끝']].forEach(f => {
+      const i = el('input'); i.type = 'number'; i.min = 0; i.placeholder = f[1];
+      i.value = c[f[0]] == null ? '' : c[f[0]];
+      i.onchange = () => { c[f[0]] = i.value === '' ? null : Number(i.value); render(); };
+      s.appendChild(i);
+    });
+
+    const vf = el('label','lbl');
+    const vb = el('input'); vb.type = 'checkbox'; vb.checked = !!c.verifiable;
+    vb.onchange = () => { c.verifiable = vb.checked; render(); };
+    vf.appendChild(vb); vf.appendChild(document.createTextNode(' 검증가능'));
+    s.appendChild(vf);
+
+    n.appendChild(s);
+    host.appendChild(n);
+  });
+}
+
+function renderConflicts(a){
+  const host = $('#cflist'); host.innerHTML = '';
+  if (!a.conflicts.length){ host.appendChild(el('div','empty','모순이 발견되지 않았습니다.')); return; }
+  a.conflicts.forEach(c => {
+    const n = el('div','cf');
+    const t = el('div','top');
+    t.appendChild(el('span','badge sev-' + c.severity, c.rule));
+    t.appendChild(el('span','lbl', c.speakers.join(' · ')));
+    t.appendChild(el('span','lbl', 'sev ' + c.sev.toFixed(2)));
+    n.appendChild(t);
+    if (c.gapOnly){
+      n.appendChild(el('div','why', c.why));
+    } else {
+      const p = el('div','pair');
+      [c.a, c.b].forEach(x => {
+        const d = el('div','side' + (c.severity === 'hard' ? ' hot' : ''));
+        d.appendChild(el('span','lbl', x.id + ' · ' + x.speaker + ' · ' + x.round + '차' +
+          (FT.hasTime(x) ? ' · ' + x.startSec + '–' + x.endSec + 's' : ' · 시간 미지정')));
+        d.appendChild(el('p', null, x.quote || '(원문 없음)'));
+        p.appendChild(d);
+      });
+      n.appendChild(p);
+      n.appendChild(el('div','why', c.why));
+    }
+    host.appendChild(n);
+  });
+}
+
+function bar(label, v){
+  const d = el('div','ax');
+  d.appendChild(el('div','lbl', label));
+  d.appendChild(el('div','v', v.toFixed(1)));
+  const b = el('div','bar'); const i = el('i'); i.style.width = Math.max(0, Math.min(100, v)) + '%';
+  b.appendChild(i); d.appendChild(b);
+  return d;
+}
+
+function renderAssess(a){
+  const rk = $('#rank'); rk.innerHTML = '';
+  if (!a.scores.length){ rk.appendChild(el('div','empty','진술이 없습니다.')); $('#scores').innerHTML = ''; return; }
+  rk.appendChild(el('div','lbl','조사 우선순위'));
+  a.scores.forEach((s, i) => {
+    const r = el('div','rk' + (i === 0 && s.suspicion > 0 ? ' top' : ''));
+    r.appendChild(el('div','lbl', String(i + 1)));
+    r.appendChild(el('div','who', s.speaker));
+    r.appendChild(el('div','sc', s.suspicion.toFixed(1)));
+    rk.appendChild(r);
+    if (s.evidence.length){
+      const e = el('div','rk'); e.style.borderTop = '0'; e.style.paddingTop = '0';
+      e.appendChild(el('div',null,''));
+      e.appendChild(el('div','ev', s.evidence.join('   ')));
+      rk.appendChild(e);
+    }
+  });
+
+  const host = $('#scores'); host.innerHTML = '';
+  a.scores.forEach(s => {
+    const n = el('div','sp');
+    n.appendChild(el('div','nm', s.speaker));
+    n.appendChild(el('div','stage','1단계 · 진술 구조'));
+    const g1 = el('div','axes');
+    g1.appendChild(bar('객관성', s.stage1.objectivity));
+    g1.appendChild(bar('일관성', s.stage1.consistency));
+    g1.appendChild(bar('통일성', s.stage1.unity));
+    n.appendChild(g1);
+    n.appendChild(el('div','stage','2단계 · 진술 내용'));
+    const g2 = el('div','axes');
+    g2.appendChild(bar('구체성', s.stage2.specificity));
+    g2.appendChild(bar('개연성', s.stage2.plausibility));
+    n.appendChild(g2);
+    n.appendChild(el('div','lbl',
+      '원자 ' + s.n + ' · 미설명 ' + s.gapSec + 's · 반전 ' + s.reversed + ' · 신규 ' + s.added + ' · 강모순 ' + s.hard));
+    host.appendChild(n);
+  });
+}
+
+/* ---- actions ---- */
+$('#b-atomize').onclick = () => {
+  const text = $('#i-text').value.trim();
+  if (!text) return;
+  state.duration = Number($('#i-dur').value) || 300;
+  const sp = $('#i-speaker').value.trim() || 'A';
+  const proposals = FT.atomize(text, {
+    speaker: sp, round: Number($('#i-round').value),
+    sourceType: $('#i-src').value,
+    locations: state.locations, entities: state.entities,
+    speakers: Array.from(new Set(speakers().concat([sp])))
+  });
+  proposals.forEach(p => { p.id = nextId(sp); p.approved = true; state.claims.push(p); });
+  $('#i-note').textContent = '원자 ' + proposals.length + '개 추가';
+  $('#i-text').value = '';
+  show('atoms');
+};
+
+$('#b-export').onclick = () => {
+  const a = recompute();
+  const blob = new Blob([JSON.stringify({
+    exportedAt: new Date().toISOString(), version: 2,
+    duration: state.duration, entities: state.entities, locations: state.locations,
+    claims: state.claims, analysis: { conflicts: a.conflicts, scores: a.scores, gaps: a.gaps }
+  }, null, 2)], { type: 'application/json' });
+  const u = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = u; link.download = 'facttrace-' + Date.now() + '.json';
+  link.click(); URL.revokeObjectURL(u);
+};
+
+$('#b-import').onclick = () => $('#f-import').click();
+$('#f-import').onchange = e => {
+  const f = e.target.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = () => { ingestJSON(r.result); e.target.value = ''; };
+  r.readAsText(f);
+};
+
+function ingestJSON(text){
+  let d; try { d = JSON.parse(text); } catch (err) { alert('JSON 파싱 실패'); return; }
+  if (d.entities) state.entities = d.entities;
+  if (d.locations) state.locations = d.locations;
+  if (d.duration) state.duration = d.duration;
+  const raw = d.claims || [];
+  state.claims = raw.map(c => FT.upgradeClaim(c, model()));
+  if (!d.duration){
+    const mx = Math.max.apply(null, state.claims.map(c => c.endSec || 0).concat([300]));
+    state.duration = mx;
+  }
+  $('#i-dur').value = state.duration;
+  show('atoms');
+}
+
+$('#b-clear').onclick = () => {
+  if (!confirm('모든 원자를 지웁니다.')) return;
+  state.claims = []; state.seq = 0; render();
+};
+
+$('#b-sample').onclick = () => {
+  fetch('samples/case-money.json')
+    .then(r => r.text()).then(ingestJSON)
+    .catch(() => alert('samples/case-money.json 을 읽지 못했습니다. Import 로 직접 불러오세요.'));
+};
+
+document.querySelectorAll('#tabs button').forEach(b => { b.onclick = () => show(b.dataset.v); });
+$('#i-dur').onchange = () => { state.duration = Number($('#i-dur').value) || 300; render(); };
+
+load();
+$('#i-dur').value = state.duration;
+show(state.claims.length ? 'atoms' : 'ingest');
+window.__selftest = FT.selftest;
+})();
+</script>
+</body>
+</html>

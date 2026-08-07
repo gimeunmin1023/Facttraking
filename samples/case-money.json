@@ -1,0 +1,107 @@
+{
+  "version": 2,
+  "case": "연구실 현금 봉투 분실",
+  "duration": 300,
+  "note": "세 진술자가 같은 현금 봉투의 위치를 다르게 말한다. 물증(CCTV)은 speaker 에 대상자를 적고 sourceType 을 evidence 로 둔다.",
+  "claims": [
+    { "id": "A1", "speaker": "A", "round": 1, "videoTime": "00:05", "quote": "연구실에 들어가서 문을 닫았습니다.",
+      "kind": "action", "predicate": "입실", "entityId": "", "locationId": "L_DOOR",
+      "startSec": 0, "endSec": 20, "polarity": "yes", "modality": "assert", "scope": "interval",
+      "sourceType": "statement", "verifiable": false, "approved": true },
+
+    { "id": "A2", "speaker": "A", "round": 1, "videoTime": "00:24", "quote": "교수님 현금 봉투는 서랍 안에 그대로 있었습니다.",
+      "kind": "state", "predicate": "목격", "entityId": "E_MONEY", "locationId": "L_DRAWER",
+      "startSec": 20, "endSec": 40, "polarity": "yes", "modality": "assert", "scope": "session",
+      "sourceType": "statement", "verifiable": true, "approved": true },
+
+    { "id": "A3", "speaker": "A", "round": 1, "videoTime": "00:48", "quote": "책장 앞으로 갔던 것 같습니다.",
+      "kind": "action", "predicate": "이동", "entityId": "", "locationId": "L_SHELF",
+      "startSec": 40, "endSec": 120, "polarity": "yes", "modality": "hedge", "scope": "interval",
+      "sourceType": "statement", "verifiable": false, "approved": true },
+
+    { "id": "A4", "speaker": "A", "round": 1, "videoTime": "02:10", "quote": "두 번째 칸에서 논문 파일을 꺼내 가방에 넣었습니다.",
+      "kind": "action", "predicate": "획득", "entityId": "E_FILE", "locationId": "L_SHELF2",
+      "startSec": 120, "endSec": 200, "polarity": "yes", "modality": "assert", "scope": "interval",
+      "sourceType": "statement", "verifiable": true, "approved": true },
+
+    { "id": "A5", "speaker": "A", "round": 1, "videoTime": "03:30", "quote": "그대로 나왔습니다.",
+      "kind": "action", "predicate": "퇴실", "entityId": "", "locationId": "L_DOOR",
+      "startSec": 200, "endSec": 300, "polarity": "yes", "modality": "assert", "scope": "interval",
+      "sourceType": "statement", "verifiable": false, "approved": true },
+
+    { "id": "B1", "speaker": "B", "round": 1, "videoTime": "00:08", "quote": "문을 열고 들어갔습니다.",
+      "kind": "action", "predicate": "입실", "entityId": "", "locationId": "L_DOOR",
+      "startSec": 0, "endSec": 30, "polarity": "yes", "modality": "assert", "scope": "interval",
+      "sourceType": "statement", "verifiable": false, "approved": true },
+
+    { "id": "B2", "speaker": "B", "round": 1, "videoTime": "00:35", "quote": "소파 옆에 가방을 내려놨습니다.",
+      "kind": "action", "predicate": "내려놓음", "entityId": "E_BAG", "locationId": "L_SOFA",
+      "startSec": 30, "endSec": 60, "polarity": "yes", "modality": "assert", "scope": "interval",
+      "sourceType": "statement", "verifiable": false, "approved": true },
+
+    { "id": "B3", "speaker": "B", "round": 1, "videoTime": "01:02", "quote": "돈 봉투는 소파 위에 나와 있었습니다.",
+      "kind": "state", "predicate": "목격", "entityId": "E_MONEY", "locationId": "L_SOFA",
+      "startSec": 60, "endSec": 80, "polarity": "yes", "modality": "assert", "scope": "session",
+      "sourceType": "statement", "verifiable": false, "approved": true },
+
+    { "id": "B4", "speaker": "B", "round": 1, "videoTime": "01:18", "quote": "책상 쪽에는 가지 않았습니다.",
+      "kind": "denial", "predicate": "이동", "entityId": "", "locationId": "L_DESK",
+      "startSec": null, "endSec": null, "polarity": "no", "modality": "assert", "scope": "session",
+      "sourceType": "statement", "verifiable": false, "approved": true },
+
+    { "id": "B5", "speaker": "B", "round": 1, "videoTime": "01:40", "quote": "창가에서 충전기를 챙겼습니다.",
+      "kind": "action", "predicate": "획득", "entityId": "E_CHARGER", "locationId": "L_WINDOW",
+      "startSec": 80, "endSec": 160, "polarity": "yes", "modality": "assert", "scope": "interval",
+      "sourceType": "statement", "verifiable": true, "approved": true },
+
+    { "id": "B6", "speaker": "B", "round": 2, "videoTime": "00:41", "quote": "책상 옆에서 잠깐 가방을 정리했습니다.",
+      "kind": "action", "predicate": "정리", "entityId": "E_BAG", "locationId": "L_DESK",
+      "startSec": 90, "endSec": 140, "polarity": "yes", "modality": "assert", "scope": "interval",
+      "sourceType": "statement", "verifiable": false, "approved": true },
+
+    { "id": "B7", "speaker": "B", "round": 2, "videoTime": "01:05", "quote": "서랍은 만지지 않았습니다.",
+      "kind": "denial", "predicate": "접촉", "entityId": "E_DRAWER", "locationId": "L_DRAWER",
+      "startSec": null, "endSec": null, "polarity": "no", "modality": "assert", "scope": "session",
+      "sourceType": "statement", "verifiable": false, "approved": true },
+
+    { "id": "B8", "speaker": "B", "round": 1, "videoTime": "04:15", "quote": "가방을 들고 나왔습니다.",
+      "kind": "action", "predicate": "퇴실", "entityId": "", "locationId": "L_DOOR",
+      "startSec": 250, "endSec": 300, "polarity": "yes", "modality": "assert", "scope": "interval",
+      "sourceType": "statement", "verifiable": false, "approved": true },
+
+    { "id": "B9", "speaker": "B", "round": 1, "videoTime": "01:35", "quote": "CCTV: 서랍을 열고 손을 넣는 동작이 확인됨.",
+      "kind": "action", "predicate": "접촉", "entityId": "E_DRAWER", "locationId": "L_DRAWER",
+      "startSec": 95, "endSec": 130, "polarity": "yes", "modality": "assert", "scope": "interval",
+      "sourceType": "evidence", "verifiable": true, "approved": true },
+
+    { "id": "C1", "speaker": "C", "round": 1, "videoTime": "00:06", "quote": "들어가자마자 문을 닫았습니다.",
+      "kind": "action", "predicate": "입실", "entityId": "", "locationId": "L_DOOR",
+      "startSec": 0, "endSec": 25, "polarity": "yes", "modality": "assert", "scope": "interval",
+      "sourceType": "statement", "verifiable": false, "approved": true },
+
+    { "id": "C2", "speaker": "C", "round": 1, "videoTime": "00:30", "quote": "서랍에 현금 봉투가 그대로 있었습니다.",
+      "kind": "state", "predicate": "목격", "entityId": "E_MONEY", "locationId": "L_DRAWER",
+      "startSec": 25, "endSec": 45, "polarity": "yes", "modality": "assert", "scope": "session",
+      "sourceType": "statement", "verifiable": true, "approved": true },
+
+    { "id": "C3", "speaker": "C", "round": 1, "videoTime": "00:52", "quote": "의자 위에 있던 상자를 확인했던 것 같습니다.",
+      "kind": "action", "predicate": "확인", "entityId": "E_BOX", "locationId": "L_CHAIR",
+      "startSec": 45, "endSec": 150, "polarity": "yes", "modality": "hedge", "scope": "interval",
+      "sourceType": "statement", "verifiable": false, "approved": true },
+
+    { "id": "C4", "speaker": "C", "round": 1, "videoTime": "01:50", "quote": "B가 책상 앞에 서 있는 걸 봤습니다.",
+      "kind": "observation", "predicate": "접근", "entityId": "", "locationId": "L_DESK", "actorId": "B",
+      "startSec": 100, "endSec": 140, "polarity": "yes", "modality": "assert", "scope": "interval",
+      "sourceType": "statement", "verifiable": false, "approved": true },
+
+    { "id": "C5", "speaker": "C", "round": 2, "videoTime": "00:47", "quote": "나오기 전에 의자를 원래 자리로 밀었습니다.",
+      "kind": "action", "predicate": "정리", "entityId": "E_CHAIR", "locationId": "L_CHAIR",
+      "startSec": 150, "endSec": 260, "polarity": "yes", "modality": "assert", "scope": "interval",
+      "sourceType": "statement", "verifiable": true, "approved": true },
+
+    { "id": "C6", "speaker": "C", "round": 1, "videoTime": "04:25", "quote": "그리고 바로 나왔습니다.",
+      "kind": "action", "predicate": "퇴실", "entityId": "", "locationId": "L_DOOR",
+      "startSec": 260, "endSec": 300, "polarity": "yes", "modality": "assert", "scope": "interval",
+      "sourceType": "statement", "verifiable": false, "approved": true }
+  ]
+}
