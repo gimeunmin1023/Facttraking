@@ -78,7 +78,10 @@ textarea:focus{outline:none;border-color:var(--ink)}
 .atom input[type=number]{width:52px;text-align:right}
 .atom .del{color:var(--mute);font-family:var(--mono);font-size:10px;margin-left:auto}
 .atom .del:hover{color:var(--flag)}
+/* 진술자가 말한 것이 아니라 앞 문맥에서 끌어온 슬롯 */
+.atom select.inf{border-bottom:1px dashed var(--flag);color:var(--flag)}
 .warn{color:var(--flag)}
+#sum{display:flex;gap:18px;padding:0 0 16px;flex-wrap:wrap}
 .tray{border:1px solid var(--flag);padding:14px 16px;margin-bottom:22px}
 .tray .r{display:flex;gap:10px;align-items:center;padding:5px 0;flex-wrap:wrap}
 
@@ -168,6 +171,7 @@ textarea:focus{outline:none;border-color:var(--ink)}
 
     <section id="v-atoms" hidden>
       <h2>Atoms</h2>
+      <div id="sum"></div>
       <div id="tray"></div>
       <div id="atoms"></div>
     </section>
@@ -225,15 +229,16 @@ const ENTITY_SEED = [
 // 뒤쪽(서술어 자리)에서 잡힌 것을 우선한다. prio 는 같은 위치에서 겹칠 때만 쓴다.
 const PREDICATES = [
   { id:'은닉',     prio:13, re:/숨기|숨겼|숨겨|감췄|감추|묻었|은닉/ },
-  { id:'획득',     prio:12, re:/가져가|가져왔|가져오|챙겼|챙기|꺼냈|꺼내|집었|주웠|가방에\s*넣|주머니에\s*넣|획득/ },
+  { id:'획득',     prio:12, re:/가져[가갔간갈올왔와오]|챙겼|챙기|꺼냈|꺼내|집었|주웠|가방에\s*넣|주머니에\s*넣|획득|빼냈|빼내/ },
   { id:'개폐',     prio:11, re:/열었|열고|열어|닫았|닫고|닫아|잠갔|잠그|풀었/ },
   { id:'접촉',     prio:10, re:/만졌|만지|만진|손대|손댔|건드렸|건드리|잡았|짚었/ },
   { id:'퇴실',     prio:9,  re:/나왔|나갔|나오|나가|퇴실|빠져나/ },
-  { id:'입실',     prio:8,  re:/들어[가와오왔]|입실|들어섰/ },
-  { id:'이동',     prio:7,  re:/갔|왔|향했|향해|이동|옮겼|올라갔|내려갔|가지\s*않|오지\s*않|간\s*적/ },
-  { id:'접근',     prio:6,  re:/접근|다가|쪽으로|옆으로|앞으로|근처/ },
-  { id:'부재',     prio:5,  re:/없었|없더|안\s*보였|비어\s*있|비었|사라졌|텅/ },
-  { id:'목격',     prio:4,  re:/봤|보였|보이|목격|있었|있던|있는\s*걸|놓여|얹혀/ },
+  { id:'입실',     prio:8,  re:/들어[가갔간와왔오옵섰설]|입실|들어서/ },
+  { id:'이동',     prio:7,  re:/갔|왔|가서|와서|향했|향해|이동|옮겼|올라갔|내려갔|가지\s*않|오지\s*않|간\s*적/ },
+  // '다가' 를 그대로 두면 '있다가' 같은 연결어미가 접근으로 잡힌다
+  { id:'접근',     prio:6,  re:/접근|다가[가갔서선섰와왔]|쪽으로|옆으로|앞으로|근처/ },
+  { id:'부재',     prio:5,  re:/없었|없더|없길래|안\s*보였|비어\s*있|비었|사라졌|텅/ },
+  { id:'목격',     prio:4,  re:/봤|보였|보이|목격|있었|있더|있던|있길래|있는\s*[걸것]|놓여|얹혀|앉아\s*있/ },
   { id:'내려놓음', prio:3,  re:/내려놨|내려놓|놓았|놨|뒀|두었|올려놨|올려놓/ },
   { id:'확인',     prio:2,  re:/확인|살펴|세어|세보|점검|훑어|들춰/ },
   { id:'정리',     prio:1,  re:/정리|치웠|치우|원위치|제자리|밀었|밀어|닦았/ }
@@ -248,17 +253,19 @@ const MOVEMENT = new Set(['이동','접근','입실','퇴실']);
 const STATEP   = new Set(['목격','부재']);
 
 const RE_NEG   = /않았|않는|않습니|않아|안\s*[갔봤했]|못\s*[갔봤했]|아닙|아니었|적\s*없|없습니다만/;
-const RE_HEDGE = /아마|같습니|같아요|같았|듯|기억이\s*안|기억이\s*잘|잘\s*모르|확실치|확실하지\s*않|아마도|인\s*것\s*같/;
-const RE_TIME  = /(\d{1,2})\s*[:분]\s*(\d{1,2})?\s*초?/;
+const RE_HEDGE = /아마|같습니|같아요|같았|것\s*같|듯|기억이\s*안|기억이\s*잘|잘\s*모르|확실치|확실하지\s*않|수도\s*있|지\s*않을까|라고\s*생각|싶습니다|인지\s*모르|가물/;
+const RE_TIME  = /\d{1,2}\s*시\s*\d{0,2}\s*분?|\d{1,2}\s*:\s*\d{1,2}|\d{1,3}\s*분(?:\s*\d{1,3}\s*초)?|\d{1,3}\s*초/;
 
-// 절 분리 지점. 한 문장 안의 서로 다른 행위를 갈라 준다.
-const CLAUSE_SPLITS = [
-  /\s*(?:그리고|그다음|그 다음|그러고|그런 다음|그 후에|그 뒤에|이후에)\s*/g,
-  /(?<=[가-힣])(?:ㄴ|은|한|는)\s*(?:다음|뒤|후)에?\s+/g,
-  /(?<=[가-힣])고\s+(?=[가-힣])/g,
-  /(?<=[가-힣])(?:면서|자마자|고서|다가|고는)\s+/g,
-  /(?<=[가-힣])(?:는데|지만|으나|나서)\s+/g
-];
+// 절 경계. 어미는 왼쪽 절에 붙여 두어야 서술어 판정이 살아 있는다.
+// split() 으로 소비하면 "그 다음에" 의 '에' 처럼 조각이 남으므로 경계 위치만 찾는다.
+const CLAUSE_TAIL = /(?:가서|와서|아서|어서|해서|고서|고는|면서|자마자|다가|길래|느라|는데|지만|으나|나서|[ㄴ은한는]\s*(?:다음|뒤|후)에?|고)(?=\s)/g;
+// 접속 부사는 어느 절에도 속하지 않으므로 통째로 들어낸다.
+const CLAUSE_ADV = /(?:그리고|그다음에?|그\s*다음에?|그러고는?|그런\s*다음|그\s*후에?|그\s*뒤에?|그리곤|이후에)\s*/g;
+
+// 앞선 원자를 가리키는 지시 표현
+const PRON_LOC = /거기|그곳|여기|이곳|그\s*자리|같은\s*자리|그\s*쪽|그쪽|거기서/;
+const PRON_ENT = /그것|그거|그걸|그게|이것|이거|이걸|저거|그\s*물건|그것들/;
+const PRON_PER = /걔|쟤|그\s*사람|그\s*애|그분|그\s*친구|본인/;
 
 /* ------------------------------------------------------- 2. 한국어 정규화 */
 
@@ -360,25 +367,33 @@ function splitSentences(text){
 }
 
 function splitClauses(sentence){
-  let parts = [sentence];
-  for (const re of CLAUSE_SPLITS){
-    const next = [];
-    for (const p of parts) next.push.apply(next, p.split(re));
-    parts = next;
+  const src = nfc(sentence);
+  // 접속 부사를 같은 길이의 공백으로 덮어 인덱스를 보존한다
+  const s = src.replace(CLAUSE_ADV, m => ' '.repeat(m.length));
+  const bounds = [0];
+  const re = new RegExp(CLAUSE_TAIL.source, 'g');
+  let m;
+  while ((m = re.exec(s)) !== null) bounds.push(m.index + m[0].length);
+  bounds.push(s.length);
+  const out = [];
+  for (let i = 0; i < bounds.length - 1; i++){
+    const piece = s.slice(bounds[i], bounds[i + 1]).trim();
+    if (piece.length > 1) out.push(piece);
   }
-  return parts.map(s => (s || '').trim()).filter(s => s.length > 1);
+  return out.length ? out : [src.trim()];
 }
 
-// 서술어는 절의 뒤쪽에서 잡힌 것을 우선한다.
+// 서술어는 절의 뒤쪽에서 끝나는 것을 우선한다. 시작 위치로 재면
+// '들어갔다' 의 '갔' 이 '들어가' 를 이겨 입실이 이동으로 뒤집힌다.
 function detectPredicate(clause){
   const t = nfc(clause);
   let best = null;
   for (const p of PREDICATES){
     const m = t.match(p.re);
     if (!m) continue;
-    const at = m.index;
-    if (!best || at > best.at || (at === best.at && p.prio > best.prio))
-      best = { id:p.id, at, prio:p.prio };
+    const end = m.index + m[0].length;
+    if (!best || end > best.end || (end === best.end && p.prio > best.prio))
+      best = { id:p.id, end, prio:p.prio };
   }
   return best ? best.id : null;
 }
@@ -392,12 +407,56 @@ function detectActor(clause, speakers){
   return null;
 }
 
+/*
+ * 문맥 이어붙이기. 절을 따로 뜯으면 "거기서 그걸 꺼냈다" 같은 절은 슬롯이 텅 빈다.
+ * 앞선 원자에서 끌어오되 반드시 inherited 에 남겨, 화면에서 추론임을 드러내고
+ * 모순 판정에서도 가중치를 깎는다. 진술자가 하지 않은 말을 조용히 채우면 안 된다.
+ */
+function linkContext(atoms){
+  let curLoc = '', curEnt = '', curActor = '', curSent = null;
+  atoms.forEach(a => {
+    a.inherited = [];
+    const sameSentence = (a.parentSentenceId === curSent);
+
+    // 장소. 상태·목격 진술의 장소는 물건이나 남이 있던 곳이므로
+    // 화자의 현재 위치로 이어받으면 안 된다.
+    const speakerPlace = (a.kind === 'action' || a.kind === 'denial');
+    // 입·퇴실은 그 자체로 출입구를 함의하므로 앞 장소를 끌어오지 않는다.
+    const carries = speakerPlace && a.predicate !== '입실' && a.predicate !== '퇴실';
+
+    if (a.locationId) { if (speakerPlace) curLoc = a.locationId; }
+    else if (curLoc && PRON_LOC.test(a.quote)) {
+      a.locationId = curLoc; a.inherited.push('locationId');
+    } else if (curLoc && sameSentence && carries) {
+      a.locationId = curLoc; a.inherited.push('locationId');
+    }
+
+    // 대상 — 지시어가 있을 때만. 생략 목적어를 넘겨받으면
+    // "봉투를 닫았다" 같은 없는 진술이 만들어진다.
+    if (a.entityId) curEnt = a.entityId;
+    else if (curEnt && PRON_ENT.test(a.quote)) {
+      a.entityId = curEnt; a.inherited.push('entityId');
+    }
+
+    // 행위자 — 지시어가 앞서 언급된 사람을 가리킬 때
+    if (a.actorId) curActor = a.actorId;
+    else if (curActor && PRON_PER.test(a.quote)) {
+      a.actorId = curActor; a.kind = 'observation'; a.inherited.push('actorId');
+    }
+
+    curSent = a.parentSentenceId;
+  });
+  return atoms;
+}
+
 function atomize(text, ctx){
   const tree = ctx.locations, reg = ctx.entities;
   const speakers = (ctx.speakers || []).filter(s => s !== ctx.speaker);
   const out = [];
   splitSentences(text).forEach((sent, si) => {
     const sid = 'S' + (si + 1);
+    // 시간 표현은 절이 갈라지면서 다른 조각으로 떨어져 나가므로 문장 단위로 잡는다
+    const sentTime = (sent.match(RE_TIME) || [''])[0];
     splitClauses(sent).forEach(cl => {
       const predicate = detectPredicate(cl);
       const loc = resolveLocation(cl, tree);
@@ -416,13 +475,14 @@ function atomize(text, ctx){
 
       const tm = cl.match(RE_TIME);
       out.push({
+        timeHint: tm ? tm[0] : sentTime,
         id: null, speaker: ctx.speaker, round: ctx.round, parentSentenceId: sid,
         quote: cl, kind, predicate: predicate || '',
         entityId: ent ? ent.id : '', entityText: ent ? ent.surface : '',
         locationId: loc ? loc.id : '', locationText: loc ? loc.surface : '',
         actorId: actor || '',
         startSec: null, endSec: null,
-        videoTime: tm ? tm[0] : '',
+        videoTime: tm ? tm[0] : sentTime,
         polarity,
         modality: RE_HEDGE.test(cl) ? 'hedge' : 'assert',
         scope: kind === 'denial' ? 'session' : 'interval',
@@ -432,7 +492,7 @@ function atomize(text, ctx){
       });
     });
   });
-  return out;
+  return linkContext(out);
 }
 
 /* ---------------------------------------------------------- 6. 시간 구간 */
@@ -494,6 +554,9 @@ function mk(rule, a, b, why, tree, extra){
   const evidence = a.sourceType === 'evidence' || b.sourceType === 'evidence';
   let sev = BASE[rule] * timeWeight(a, b) * (evidence ? 2 : 1);
   if (a.modality === 'hedge' || b.modality === 'hedge') sev *= 0.6;
+  // 문맥에서 끌어온 슬롯 위에 세운 판정은 진술자가 직접 말한 것보다 약하게 잡는다
+  const inferred = (a.inherited && a.inherited.length) || (b.inherited && b.inherited.length);
+  if (inferred) sev *= 0.7;
   sev = Math.round(sev * 100) / 100;
   const blame = {}; blame[a.speaker] = 1; blame[b.speaker] = 1;
   return Object.assign({
@@ -784,10 +847,51 @@ function selftest(){
   ok('구역 포함관계', sameZone('L_DRAWER','L_DESK',LOCATION_SEED) && disjointZone('L_WINDOW','L_DESK',LOCATION_SEED));
 
   // 절 분해 + 서술어 위치 우선
-  const at = atomize('책상 옆에서 잠깐 가방을 정리한 다음 창가로 갔습니다.',
-                     { speaker:'B', round:2, locations:LOCATION_SEED, entities:ENTITY_SEED, speakers:['A','B'] });
+  const AT = t => atomize(t, { speaker:'A', round:1, locations:LOCATION_SEED,
+                               entities:ENTITY_SEED, speakers:['A','B','C'] });
+
+  const at = AT('책상 옆에서 잠깐 가방을 정리한 다음 창가로 갔습니다.');
   ok('절 분해로 원자 2개', at.length === 2 && at[0].locationId === 'L_DESK' && at[1].locationId === 'L_WINDOW');
   ok('서술어는 뒤쪽 우선', detectPredicate('나오기 직전에 의자를 원래 위치로 밀었습니다') === '정리');
+
+  // -어서/-가서 연결 — 이전에는 두 행위가 한 원자로 뭉개졌다
+  const at2 = AT('교수님 책상 쪽으로 가서 서랍을 열었어요.');
+  ok('-가서 에서 절 분해', at2.length === 2 &&
+     at2[0].predicate === '이동' && at2[1].predicate === '개폐');
+
+  // 접속 부사를 잘라내도 본문이 깨지지 않아야 한다 ('에 창가로' 같은 잔해 금지)
+  const at3 = AT('그 다음에 창가로 가서 충전기를 챙겼고요.');
+  ok('접속 부사 제거 시 본문 보존', at3.length === 2 && at3[0].quote.indexOf('창가로') === 0);
+
+  // 입실·퇴실이 '갔/왔' 에 먹히지 않아야 한다
+  ok('입실 판정', detectPredicate('연구실에 들어갔습니다') === '입실');
+  ok('퇴실 판정', detectPredicate('그대로 나왔습니다') === '퇴실');
+  ok('연결어미 오탐 없음', detectPredicate('저는 5분쯤 있다가') !== '접근');
+
+  // 지시어 해소
+  const at4 = AT('서랍을 열었어요. 거기 봉투가 있길래 그냥 닫았습니다.');
+  const seen = at4.find(c => c.entityId === 'E_MONEY');
+  ok('지시어 “거기” 로 장소 상속', seen && seen.locationId === 'L_DRAWER' &&
+     seen.inherited.indexOf('locationId') >= 0);
+  ok('“있길래” 를 상태 진술로', seen && seen.kind === 'state' && seen.predicate === '목격');
+
+  // 목격한 남의 위치를 화자 위치로 이어받으면 안 된다
+  const at5 = AT('B는 소파에 앉아 있었습니다. 저는 그대로 나왔습니다.');
+  const exit = at5.find(c => c.predicate === '퇴실');
+  ok('목격 위치는 화자 위치로 새지 않음', exit && exit.locationId !== 'L_SOFA');
+
+  // 시간 표현이 다른 절로 떨어져 나가도 문장 단위로 붙잡는다
+  const at6 = AT('저는 5분쯤 있다가 나왔습니다.');
+  ok('시간 힌트 문장 단위 보존', at6.length && at6[at6.length - 1].timeHint === '5분');
+
+  // 추측 표현
+  const at7 = AT('걔가 그걸 가져갔을 수도 있어요.');
+  ok('추측 표현 검출', at7.length && at7[0].modality === 'hedge');
+  ok('인칭 지시어로 행위자 상속', (() => {
+    const a = AT('B는 소파에 앉아 있었습니다. 걔가 그걸 가져갔어요.');
+    const last = a[a.length - 1];
+    return last.actorId === 'B' && last.inherited.indexOf('actorId') >= 0;
+  })());
 
   // R1a
   let r = detectConflicts([
@@ -951,6 +1055,21 @@ function sel(cls, val, pairs, on){
 }
 
 function renderAtoms(){
+  // 사람이 손대야 하는 것부터 세어 보여준다
+  const sum = $('#sum'); sum.innerHTML = '';
+  const noTime = state.claims.filter(c => !FT.hasTime(c)).length;
+  const inf = state.claims.filter(c => c.inherited && c.inherited.length).length;
+  const noSlot = state.claims.filter(c => !c.predicate || (!c.entityId && !c.locationId)).length;
+  [['원자', state.claims.length, false],
+   ['문맥 추론', inf, inf > 0],
+   ['시간 미지정', noTime, noTime > 0],
+   ['슬롯 미완', noSlot, noSlot > 0]
+  ].forEach(x => {
+    const d = el('div', 'lbl' + (x[2] ? ' warn' : ''), x[0] + ' ' + x[1]);
+    sum.appendChild(d);
+  });
+  if (noTime) sum.appendChild(el('div','lbl','시간을 채워야 R4·R6가 동작합니다'));
+
   const tray = $('#tray'); tray.innerHTML = '';
   const un = state.claims.filter(c => c.unresolved && !c.entityId);
   if (un.length){
@@ -988,7 +1107,9 @@ function renderAtoms(){
     const n = el('div','atom');
     const h = el('div','head');
     h.appendChild(el('span','lbl', c.id + ' · ' + c.speaker + ' · ' + c.round + '차'));
-    if (!FT.hasTime(c)) h.appendChild(el('span','lbl warn','시간 미지정'));
+    if (!FT.hasTime(c)) h.appendChild(el('span','lbl warn',
+      '시간 미지정' + (c.timeHint ? ' · 힌트 ' + c.timeHint : '')));
+    if (c.inherited && c.inherited.length) h.appendChild(el('span','lbl warn','문맥 추론'));
     const del = el('button','del','삭제');
     del.onclick = () => { state.claims = state.claims.filter(x => x !== c); render(); };
     h.appendChild(del);
@@ -1006,30 +1127,34 @@ function renderAtoms(){
     pr.onchange = () => { c.predicate = pr.value; render(); };
     s.appendChild(pr);
 
-    const en = el('select');
+    // 문맥에서 끌어온 슬롯은 붉은 점선으로 구분한다. 사람이 손대면 확정으로 바뀐다.
+    const isInf = slot => (c.inherited || []).indexOf(slot) >= 0;
+    const confirm = slot => { c.inherited = (c.inherited || []).filter(x => x !== slot); };
+
+    const en = el('select', isInf('entityId') ? 'inf' : null);
     [{id:'',canonical:'대상 없음'}].concat(state.entities).forEach(e => {
       const o = el('option', null, e.canonical); o.value = e.id;
       if (c.entityId === e.id) o.selected = true; en.appendChild(o);
     });
-    en.onchange = () => { c.entityId = en.value; render(); };
+    en.onchange = () => { c.entityId = en.value; confirm('entityId'); render(); };
     s.appendChild(en);
 
-    const lo = el('select');
+    const lo = el('select', isInf('locationId') ? 'inf' : null);
     const lopts = [['', '장소 없음']].concat(Object.keys(state.locations).map(k => [k, state.locations[k].name]));
     lopts.forEach(p => {
       const o = el('option', null, p[1]); o.value = p[0];
       if (c.locationId === p[0]) o.selected = true; lo.appendChild(o);
     });
-    lo.onchange = () => { c.locationId = lo.value; render(); };
+    lo.onchange = () => { c.locationId = lo.value; confirm('locationId'); render(); };
     s.appendChild(lo);
 
     if (c.kind === 'observation'){
-      const ac = el('select');
+      const ac = el('select', isInf('actorId') ? 'inf' : null);
       [''].concat(speakers()).forEach(sp => {
         const o = el('option', null, sp ? sp + ' 관찰' : '대상 없음'); o.value = sp;
         if (c.actorId === sp) o.selected = true; ac.appendChild(o);
       });
-      ac.onchange = () => { c.actorId = ac.value; render(); };
+      ac.onchange = () => { c.actorId = ac.value; confirm('actorId'); render(); };
       s.appendChild(ac);
     }
 
