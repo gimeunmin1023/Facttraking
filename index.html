@@ -242,9 +242,10 @@ const ENTITY_SEED = [
   { id:'E_BAG',     canonical:'가방',      aliases:['가방','백팩','배낭','에코백'], personal:true },
   { id:'E_CHARGER', canonical:'충전기',    aliases:['충전기','어댑터','케이블'] },
   { id:'E_BOX',     canonical:'개인 상자', aliases:['개인 상자','상자','박스'] },
-  { id:'E_DRAWER',  canonical:'책상 서랍', aliases:['책상 서랍','서랍','서랍장'] },
-  { id:'E_CHAIR',   canonical:'의자',      aliases:['의자'] },
-  { id:'E_DOOR',    canonical:'출입문',    aliases:['출입문','문'] },
+  // at: 옮길 수 없는 물건이 놓인 자리. 손댔다면 그 자리에 있었다는 뜻이다.
+  { id:'E_DRAWER',  canonical:'책상 서랍', aliases:['책상 서랍','서랍','서랍장'], at:'L_DRAWER' },
+  { id:'E_CHAIR',   canonical:'의자',      aliases:['의자'], at:'L_CHAIR' },
+  { id:'E_DOOR',    canonical:'출입문',    aliases:['출입문','문'], at:'L_DOOR' },
   { id:'E_LAPTOP',  canonical:'노트북',    aliases:['노트북','랩탑'], personal:true },
   { id:'E_WALLET',  canonical:'지갑',      aliases:['지갑'], personal:true },
   { id:'E_KEY',     canonical:'열쇠',      aliases:['열쇠','키','키카드','카드키'] }
@@ -253,7 +254,7 @@ const ENTITY_SEED = [
 // 뒤쪽(서술어 자리)에서 잡힌 것을 우선한다. prio 는 같은 위치에서 겹칠 때만 쓴다.
 const PREDICATES = [
   { id:'은닉',     prio:13, re:/숨기|숨겼|숨겨|감췄|감추|묻었|은닉/ },
-  { id:'획득',     prio:12, re:/가져[가갔간갈올왔와오]|챙겼|챙기|꺼냈|꺼내|집었|주웠|가방에\s*넣|주머니에\s*넣|획득|빼냈|빼내|들고|들었/ },
+  { id:'획득',     prio:12, re:/가져[가갔간갈올왔와오]|챙겼|챙기|꺼냈|꺼내|집었|주웠|가방에\s*넣|주머니에\s*넣|획득|빼냈|빼내|들고|집어\s*들/ },
   { id:'개폐',     prio:11, re:/열었|열고|열어|닫았|닫고|닫아|잠갔|잠그|풀었/ },
   { id:'접촉',     prio:10, re:/만졌|만지|만진|손대|손댔|건드렸|건드리|잡았|짚었/ },
   { id:'퇴실',     prio:9,  re:/나왔|나갔|나오|나가|퇴실|빠져나/ },
@@ -261,9 +262,9 @@ const PREDICATES = [
   { id:'이동',     prio:7,  re:/갔|왔|가서|와서|향했|향해|이동|옮겼|올라갔|내려갔|가지\s*않|오지\s*않|간\s*적/ },
   // '다가' 를 그대로 두면 '있다가' 같은 연결어미가 접근으로 잡힌다
   { id:'접근',     prio:6,  re:/접근|다가[가갔서선섰와왔]|쪽으로|옆으로|앞으로|근처/ },
-  { id:'부재',     prio:5,  re:/없었|없더|없길래|안\s*보였|비어\s*있|비었|사라졌|텅/ },
+  { id:'부재',     prio:5,  re:/없었|없더|없길래|안\s*보[였이]|못\s*봤|비어\s*있|비었|사라[졌진지]|없어[졌진지]|텅/ },
   { id:'목격',     prio:4,  re:/봤|보였|보이|목격|있었|있더|있던|있길래|있는\s*[걸것]|놓여|얹혀|앉아\s*있/ },
-  { id:'내려놓음', prio:3,  re:/내려놨|내려놓|놓았|놨|뒀|두었|올려놨|올려놓/ },
+  { id:'내려놓음', prio:3,  re:/내려놨|내려놓|놓았|놨|뒀|두었|올려놨|올려놓|보관|두십|둡니|두는|놔뒀/ },
   { id:'확인',     prio:2,  re:/확인|살펴|세어|세보|점검|훑어|들춰|찾았|찾아|찾는|발견/ },
   { id:'정리',     prio:1,  re:/정리|치웠|치우|원위치|제자리|밀었|밀어|닦았/ }
 ];
@@ -273,11 +274,17 @@ const PRESENCE = new Set(['이동','접근','접촉','개폐','획득','확인',
 // 그 자리에 있었는가 자체를 다투는 술어. "만지지 않았다"는 접촉의 부인이지
 // 그 자리에 없었다는 뜻이 아니므로 여기서 제외한다.
 const MOVEMENT = new Set(['이동','접근','입실','퇴실']);
+// 물건을 옮기는 술어. 목격된 위치가 달라졌을 때 그것을 설명해 주는 행위들이다.
+const MOVERS = new Set(['획득','은닉','내려놓음','이동','정리']);
 // 화자가 아니라 대상의 상태를 말하는 술어
 const STATEP   = new Set(['목격','부재']);
 
 const RE_NEG   = /않았|않는|않습니|않아|안\s*[갔봤했]|못\s*[갔봤했]|아닙|아니었|적\s*없|없습니다만/;
-const RE_HEDGE = /아마|같습니|같아요|같았|것\s*같|듯|기억이\s*안|기억이\s*잘|잘\s*모르|확실치|확실하지\s*않|수도\s*있|지\s*않을까|라고\s*생각|싶습니다|인지\s*모르|가물/;
+const RE_HEDGE = /아마|같습니|같아요|같았|것\s*같|듯|기억이\s*안|기억이\s*잘|잘\s*모르|확실치|확실하지\s*않|수도\s*있|지\s*않을까|라고\s*생각|싶습니다|인지\s*모르|가물|모르겠|기억이\s*없|아닌가/;
+// 장소 별칭 뒤에 이 조사가 붙으면 장소가 아니라 대상이다
+const OBJECT_PARTICLE = /^(?:을|를|은|는|이|가|도|만)(?![가-힣])/;
+// 전언 — 본 것이 아니라 들은 것
+const RE_HEARSAY = /[다라]고\s*(?:들|했|하[더던])|들었|들은\s*(?:바|얘기|말)|얘기\s*들|말을\s*들|전해\s*들|[다라]더라|[다라]던데|고\s*하더/;
 const RE_TIME  = /\d{1,2}\s*시\s*\d{0,2}\s*분?|\d{1,2}\s*:\s*\d{1,2}|\d{1,3}\s*분(?:\s*\d{1,3}\s*초)?|\d{1,3}\s*초/;
 
 // 절 경계. 어미는 왼쪽 절에 붙여 두어야 서술어 판정이 살아 있는다.
@@ -458,7 +465,7 @@ function detectActor(clause, speakers){
  * 앞선 원자에서 끌어오되 반드시 inherited 에 남겨, 화면에서 추론임을 드러내고
  * 모순 판정에서도 가중치를 깎는다. 진술자가 하지 않은 말을 조용히 채우면 안 된다.
  */
-function linkContext(atoms){
+function linkContext(atoms, reg){
   let curLoc = '', curEnt = '', curActor = '', curSent = null;
   atoms.forEach(a => {
     a.inherited = [];
@@ -467,6 +474,13 @@ function linkContext(atoms){
     // 장소. 상태·목격 진술의 장소는 물건이나 남이 있던 곳이므로
     // 화자의 현재 위치로 이어받으면 안 된다.
     const speakerPlace = (a.kind === 'action' || a.kind === 'denial');
+
+    // 붙박이 물건을 다뤘다면 그 자리에 있었던 것이다. "서랍을 열었다" 는
+    // 서랍이 목적어라 장소가 비지만, 화자는 서랍 앞에 있었다.
+    if (!a.locationId && a.entityId && speakerPlace && PRESENCE.has(a.predicate)){
+      const e = (reg || ENTITY_SEED).find(x => x.id === a.entityId);
+      if (e && e.at){ a.locationId = e.at; a.inherited.push('locationId'); }
+    }
     // 입·퇴실은 그 자체로 출입구를 함의하므로 앞 장소를 끌어오지 않는다.
     const carries = speakerPlace && a.predicate !== '입실' && a.predicate !== '퇴실';
 
@@ -539,10 +553,24 @@ function atomize(text, ctx){
     const sid = 'S' + (si + 1);
     // 시간 표현은 절이 갈라지면서 다른 조각으로 떨어져 나가므로 문장 단위로 잡는다
     const sentTime = (sent.match(RE_TIME) || [''])[0];
+    // 전언 여부는 문장 끝에서 결정되므로 문장 단위로 본다
+    const hearsay = RE_HEARSAY.test(sent);
     splitClauses(sent).forEach(cl => {
+      // "…라고 들었습니다" 의 꼬리절은 그 자체로 행위가 아니다.
+      // 그냥 두면 '들었' 이 획득으로 잡혀 없던 행위가 만들어진다.
+      if (hearsay && /^(?:들었|들은|얘기|말을|전해)/.test(cl.trim())) return;
       const predicate = detectPredicate(cl);
-      const loc = resolveLocation(cl, tree);
-      const ent = resolveEntity(cl, reg);
+
+      /* 같은 낱말이 장소도 되고 대상도 된다. "서랍에 있었다" 의 서랍은 장소지만
+         "서랍은 만지지 않았다" 의 서랍은 대상이다. 뒤에 붙은 조사로 가른다.
+         장소로 확정되면 그 자리를 지우고 대상을 찾는다 — 안 그러면
+         "돈이 서랍에 있었다" 의 대상이 돈이 아니라 서랍으로 잡힌다. */
+      let loc = resolveLocation(cl, tree);
+      if (loc && OBJECT_PARTICLE.test(cl.slice(loc.at + loc.surface.length))) loc = null;
+      const masked = loc
+        ? cl.slice(0, loc.at) + ' '.repeat(loc.surface.length) + cl.slice(loc.at + loc.surface.length)
+        : cl;
+      const ent = resolveEntity(masked, reg);
       const actor = detectActor(cl, speakers);
       if (!predicate && !loc && !ent) return;             // 정보 없는 절은 버린다
 
@@ -567,7 +595,8 @@ function atomize(text, ctx){
         startSec: null, endSec: null,
         videoTime: tm ? tm[0] : sentTime,
         polarity,
-        modality: RE_HEDGE.test(cl) ? 'hedge' : 'assert',
+        modality: (RE_HEDGE.test(cl) || hearsay) ? 'hedge' : 'assert',
+        hearsay,
         scope: kind === 'denial' ? 'session' : 'interval',
         sourceType: ctx.sourceType || 'statement',
         verifiable: false, stateBefore: '', stateAfter: '',
@@ -575,7 +604,7 @@ function atomize(text, ctx){
       });
     });
   });
-  return assignPhases(linkContext(out), ctx.phases);
+  return assignPhases(linkContext(out, reg), ctx.phases);
 }
 
 /* ---------------------------------------------------------- 6. 시간 구간 */
@@ -632,7 +661,16 @@ function coverage(list, duration){
 
 /* ------------------------------------------------------------- 7. 규칙 */
 
-const BASE = { R1a:1.0, R1b:1.0, R2:1.0, R3:1.0, R4:0.9, R5:0.5, R6:0.5, R9:0.7 };
+const BASE = { R1a:1.0, R1b:1.0, R2:1.0, R2b:0.8, R3:1.0, R4:0.9, R5:0.5, R6:0.5, R9:0.7 };
+
+// 두 구간 사이에 그 물건을 옮겼다고 말한 사람이 있는가
+function movedBetween(entityId, p1, p2, claims){
+  const i1 = phaseIndex(p1, PHASES), i2 = phaseIndex(p2, PHASES);
+  const lo = Math.min(i1, i2), hi = Math.max(i1, i2);
+  return claims.some(c => c.entityId === entityId && c.polarity === 'yes' &&
+    c.kind !== 'state' && MOVERS.has(c.predicate) &&
+    phaseIndex(c.phase, PHASES) >= lo && phaseIndex(c.phase, PHASES) <= hi);
+}
 
 function assertsPresence(c){
   return (c.kind === 'action') && c.locationId && PRESENCE.has(c.predicate) && c.polarity === 'yes';
@@ -646,8 +684,8 @@ function deniesPresence(c){
 // 깎지 않기 위해 필요하다. 기본은 양쪽 동일.
 function mk(rule, a, b, why, tree, extra){
   const evidence = a.sourceType === 'evidence' || b.sourceType === 'evidence';
-  // R9 는 구간이 어긋난 것 자체가 판정 내용이므로 시점일치로 깎지 않는다
-  const tw = rule === 'R9' ? 1 : timeWeight(a, b);
+  // R2b·R9 는 구간이 어긋난 것 자체가 판정 내용이므로 시점일치로 깎지 않는다
+  const tw = (rule === 'R9' || rule === 'R2b') ? 1 : timeWeight(a, b);
   let sev = BASE[rule] * tw * (evidence ? 2 : 1);
   if (a.modality === 'hedge' || b.modality === 'hedge') sev *= 0.6;
   // 문맥에서 끌어온 슬롯 위에 세운 판정은 진술자가 직접 말한 것보다 약하게 잡는다
@@ -679,7 +717,12 @@ function detectConflicts(claims, model){
     for (let j = i + 1; j < cs.length; j++){
       const a = cs[i], b = cs[j];
       const same = a.speaker === b.speaker;
-      if (!comparable(a, b)) continue;
+      /* 물건이 어디 있었는가는 두 사람이 같은 순간을 말할 때만 견줄 수 있는 게 아니다.
+         구간이 다르면 그 사이에 옮겨졌다는 뜻이고, 옮긴 사람이 없으면 그것 자체가 쟁점이다.
+         그래서 이 비교만 시점 제약에서 빼 준다. */
+      const objectLocation = !same && a.kind === 'state' && b.kind === 'state' &&
+            a.entityId && a.entityId === b.entityId && !isPersonal(a.entityId, model.entities);
+      if (!comparable(a, b) && !objectLocation) continue;
 
       /* R1a 자기 위치 모순 — 술어가 달라도 '그 구역에 있었는가'로 비교한다 */
       if (same){
@@ -713,15 +756,20 @@ function detectConflicts(claims, model){
       }
 
       /* R2 교차 화자 위치 모순 — 같은 물건을 서로 다른 구역에 둔다 */
-      if (!same && a.kind === 'state' && b.kind === 'state' &&
-          a.polarity === 'yes' && b.polarity === 'yes' &&
-          a.entityId && a.entityId === b.entityId &&
-          !isPersonal(a.entityId, model.entities) &&
+      if (objectLocation && a.polarity === 'yes' && b.polarity === 'yes' &&
           disjointZone(a.locationId, b.locationId, tree)){
-        push(mk('R2', a, b,
-          '같은 대상의 위치를 서로 다르게 진술합니다: ' +
-          (tree[a.locationId] ? tree[a.locationId].name : a.locationId) + ' ↔ ' +
-          (tree[b.locationId] ? tree[b.locationId].name : b.locationId), tree));
+        const where = (tree[a.locationId] ? tree[a.locationId].name : a.locationId) + ' ↔ ' +
+                      (tree[b.locationId] ? tree[b.locationId].name : b.locationId);
+        const together = a.scope === 'session' || b.scope === 'session' ||
+                         !bothPhased(a, b, PHASES) || samePhase(a, b);
+        if (together){
+          push(mk('R2', a, b, '같은 대상의 위치를 서로 다르게 진술합니다: ' + where, tree));
+        } else if (!movedBetween(a.entityId, a.phase, b.phase, cs)){
+          // 위치가 달라졌는데 옮겼다는 진술이 아무에게도 없다
+          push(mk('R2b', a, b,
+            '대상의 위치가 ' + where + ' 로 달라졌는데, 옮겼다는 진술이 없습니다 (' +
+            a.phase + ' → ' + b.phase + ').', tree));
+        }
       }
 
       /* R3 교차 화자 행위 모순 — 목격 진술 대 당사자 진술 */
@@ -755,7 +803,7 @@ function detectConflicts(claims, model){
   }
 
   /* R2 다수결 책임 배분 — 같은 물건에 대해 다수가 합의한 위치를 말한 화자는 덜 깎는다 */
-  const r2 = found.filter(c => c.rule.indexOf('R2') === 0);
+  const r2 = found.filter(c => c.rule.indexOf('R2') === 0 || c.rule.indexOf('R2b') === 0);
   if (r2.length){
     const tally = {};   // entityId -> locationId -> Set(speaker)
     cs.filter(c => c.kind === 'state' && c.polarity === 'yes' && c.entityId && c.locationId)
@@ -1203,6 +1251,59 @@ function selftest(){
     C({ id:'y2', predicate:'접촉', locationId:'L_DESK',   phase:'후반' },2)
   ], M);
   ok('심각도 0 은 내보내지 않음', r.conflicts.every(c => c.sev > 0));
+
+  /* --- 물건(현금) 위치 진술 --- */
+
+  // 같은 낱말이 장소도 되고 대상도 된다. 조사로 가른다.
+  const m1 = AT('돈이 서랍에 있었어요.')[0];
+  ok('“돈이 서랍에” 는 대상이 돈', m1.entityId === 'E_MONEY' && m1.locationId === 'L_DRAWER');
+  const m2 = AT('서랍은 만지지 않았습니다.')[0];
+  ok('“서랍은 만지지” 는 대상이 서랍', m2.entityId === 'E_DRAWER' && m2.polarity === 'no');
+  ok('붙박이 물건은 그 자리를 함의', (() => {
+    const a = AT('서랍을 열었어요. 거기 봉투가 있길래 그냥 닫았습니다.');
+    return a[0].locationId === 'L_DRAWER' && a[0].inherited.indexOf('locationId') >= 0;
+  })());
+
+  ok('금액 표현도 현금으로', AT('5만원권 다발이 책상 위에 있었습니다.')[0].entityId === 'E_MONEY');
+  ok('보관·두다 술어', detectPredicate('교수님은 돈을 항상 서랍에 두십니다') === '내려놓음' &&
+     AT('현금은 캐비닛에 보관돼 있었습니다.')[0].locationId === 'L_CABINET');
+  ok('부재 표현', AT('봉투가 안 보이더라고요.')[0].predicate === '부재' &&
+     AT('돈이 없어진 걸 나중에 알았습니다.')[0].predicate === '부재');
+
+  // 전언 — 들은 것을 본 것으로 적으면 안 된다
+  const hs = AT('교수님이 현금을 서랍에 보관하신다고 들었습니다.');
+  ok('전언은 추측으로', hs.every(c => c.modality === 'hedge' && c.hearsay));
+  ok('전언 꼬리절이 행위로 둔갑하지 않음', hs.every(c => c.predicate !== '획득'));
+
+  // R2 동시 모순 vs R2b 설명되지 않은 이동
+  const sight = (id, sp, loc, phase, scope) =>
+    C({ id, speaker:sp, kind:'state', predicate:'목격', entityId:'E_MONEY',
+        locationId:loc, phase, scope: scope || 'interval' }, 0);
+  r = detectConflicts([
+    sight('k1','A','L_DRAWER','초반'), sight('k2','B','L_SOFA','초반')
+  ], M);
+  ok('같은 구간이면 R2 (동시 모순)', r.conflicts.some(c => c.rule === 'R2' && c.severity === 'hard'));
+
+  r = detectConflicts([
+    sight('k3','A','L_DRAWER','초반'), sight('k4','B','L_SOFA','중반')
+  ], M);
+  const mv = r.conflicts.filter(c => c.rule.indexOf('R2b') === 0);
+  ok('구간이 다르면 R2b (설명 없는 이동)', mv.length === 1 && /옮겼다는 진술이 없/.test(mv[0].why));
+
+  r = detectConflicts([
+    sight('k5','A','L_DRAWER','초반'), sight('k6','B','L_SOFA','중반'),
+    C({ id:'k7', speaker:'C', predicate:'내려놓음', entityId:'E_MONEY',
+        locationId:'L_SOFA', phase:'초반' }, 0)
+  ], M);
+  ok('옮겼다는 진술이 있으면 R2b 없음', !r.conflicts.some(c => c.rule.indexOf('R2b') === 0));
+
+  // 소수 위치를 말한 쪽이 책임을 진다
+  r = detectConflicts([
+    sight('k8','A','L_DRAWER','초반','session'), sight('k9','B','L_SOFA','초반','session'),
+    sight('k10','C','L_DRAWER','초반','session')
+  ], M);
+  const bl = r.conflicts.filter(c => c.rule === 'R2');
+  ok('다수결 책임 배분', bl.length === 2 && bl.every(c => c.blame.B === 1 && c.blame.A !== 1 || c.blame.C !== 1));
 
   // R7 물증 가중
   r = detectConflicts([
