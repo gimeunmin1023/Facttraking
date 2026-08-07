@@ -238,32 +238,33 @@ const LOCATION_SEED = {
 const ENTITY_SEED = [
   { id:'E_MONEY',   canonical:'현금',      aliases:['현금','돈','지폐','봉투','돈봉투','현금 봉투','오만원권','만원권','현금다발'] },
   { id:'E_FILE',    canonical:'논문 파일', aliases:['논문 파일','논문','파일','자료','서류'] },
-  { id:'E_BAG',     canonical:'가방',      aliases:['가방','백팩','배낭','에코백'] },
+  // personal: 사람마다 자기 것이 따로 있는 물건. 화자 간 동일 사건으로 묶으면 안 된다.
+  { id:'E_BAG',     canonical:'가방',      aliases:['가방','백팩','배낭','에코백'], personal:true },
   { id:'E_CHARGER', canonical:'충전기',    aliases:['충전기','어댑터','케이블'] },
   { id:'E_BOX',     canonical:'개인 상자', aliases:['개인 상자','상자','박스'] },
   { id:'E_DRAWER',  canonical:'책상 서랍', aliases:['책상 서랍','서랍','서랍장'] },
   { id:'E_CHAIR',   canonical:'의자',      aliases:['의자'] },
   { id:'E_DOOR',    canonical:'출입문',    aliases:['출입문','문'] },
-  { id:'E_LAPTOP',  canonical:'노트북',    aliases:['노트북','랩탑'] },
-  { id:'E_WALLET',  canonical:'지갑',      aliases:['지갑'] },
+  { id:'E_LAPTOP',  canonical:'노트북',    aliases:['노트북','랩탑'], personal:true },
+  { id:'E_WALLET',  canonical:'지갑',      aliases:['지갑'], personal:true },
   { id:'E_KEY',     canonical:'열쇠',      aliases:['열쇠','키','키카드','카드키'] }
 ];
 
 // 뒤쪽(서술어 자리)에서 잡힌 것을 우선한다. prio 는 같은 위치에서 겹칠 때만 쓴다.
 const PREDICATES = [
   { id:'은닉',     prio:13, re:/숨기|숨겼|숨겨|감췄|감추|묻었|은닉/ },
-  { id:'획득',     prio:12, re:/가져[가갔간갈올왔와오]|챙겼|챙기|꺼냈|꺼내|집었|주웠|가방에\s*넣|주머니에\s*넣|획득|빼냈|빼내/ },
+  { id:'획득',     prio:12, re:/가져[가갔간갈올왔와오]|챙겼|챙기|꺼냈|꺼내|집었|주웠|가방에\s*넣|주머니에\s*넣|획득|빼냈|빼내|들고|들었/ },
   { id:'개폐',     prio:11, re:/열었|열고|열어|닫았|닫고|닫아|잠갔|잠그|풀었/ },
   { id:'접촉',     prio:10, re:/만졌|만지|만진|손대|손댔|건드렸|건드리|잡았|짚었/ },
   { id:'퇴실',     prio:9,  re:/나왔|나갔|나오|나가|퇴실|빠져나/ },
-  { id:'입실',     prio:8,  re:/들어[가갔간와왔오옵섰설]|입실|들어서/ },
+  { id:'입실',     prio:8,  re:/들어와서|들어가서|들어[가갔간와왔오옵섰설]|입실|들어서/ },
   { id:'이동',     prio:7,  re:/갔|왔|가서|와서|향했|향해|이동|옮겼|올라갔|내려갔|가지\s*않|오지\s*않|간\s*적/ },
   // '다가' 를 그대로 두면 '있다가' 같은 연결어미가 접근으로 잡힌다
   { id:'접근',     prio:6,  re:/접근|다가[가갔서선섰와왔]|쪽으로|옆으로|앞으로|근처/ },
   { id:'부재',     prio:5,  re:/없었|없더|없길래|안\s*보였|비어\s*있|비었|사라졌|텅/ },
   { id:'목격',     prio:4,  re:/봤|보였|보이|목격|있었|있더|있던|있길래|있는\s*[걸것]|놓여|얹혀|앉아\s*있/ },
   { id:'내려놓음', prio:3,  re:/내려놨|내려놓|놓았|놨|뒀|두었|올려놨|올려놓/ },
-  { id:'확인',     prio:2,  re:/확인|살펴|세어|세보|점검|훑어|들춰/ },
+  { id:'확인',     prio:2,  re:/확인|살펴|세어|세보|점검|훑어|들춰|찾았|찾아|찾는|발견/ },
   { id:'정리',     prio:1,  re:/정리|치웠|치우|원위치|제자리|밀었|밀어|닦았/ }
 ];
 
@@ -332,6 +333,12 @@ function jaccard(a, b){
 
 /* ------------------------------------------------------------ 3. 위치 트리 */
 
+// 각자 하나씩 갖고 있는 물건인가. B 의 가방과 C 의 가방은 같은 물건이 아니다.
+function isPersonal(entityId, reg){
+  const e = (reg || ENTITY_SEED).find(x => x.id === entityId);
+  return !!(e && e.personal);
+}
+
 function ancestry(id, tree){
   const chain = []; let cur = id, guard = 0;
   while (cur && tree[cur] && guard++ < 32){ chain.push(cur); cur = tree[cur].parent; }
@@ -349,13 +356,25 @@ function disjointZone(a, b, tree){
 
 /* -------------------------------------------------------------- 4. 해소 */
 
+/*
+ * 별칭은 낱말 앞에서 시작할 때만 인정한다. 한글은 띄어쓰기가 헐거워
+ * 그냥 indexOf 를 쓰면 '가방' 안의 '방' 이 연구실로, '논문' 안의 '문' 이
+ * 출입문으로 잡힌다. 앞 글자가 한글이면 그 별칭은 더 긴 낱말의 일부다.
+ */
+const HANGUL = /[가-힣]/;
+function aliasAt(text, alias, from){
+  let i = text.indexOf(alias, from || 0);
+  while (i > 0 && HANGUL.test(text[i - 1])) i = text.indexOf(alias, i + 1);
+  return i;
+}
+
 // 가장 긴 별칭이 이긴다. "책상 서랍" 이 "책상" 보다 먼저 잡히도록.
 function resolveLocation(text, tree){
   const t = nfc(text);
   let best = null;
   for (const id in tree){
     for (const a of tree[id].aliases){
-      const i = t.indexOf(a);
+      const i = aliasAt(t, a);
       if (i >= 0 && (!best || a.length > best.len || (a.length === best.len && i > best.at)))
         best = { id, len:a.length, at:i, surface:a };
     }
@@ -368,7 +387,7 @@ function resolveEntity(text, reg){
   let best = null;
   for (const e of reg){
     for (const a of e.aliases){
-      const i = t.indexOf(a);
+      const i = aliasAt(t, a);
       if (i >= 0 && (!best || a.length > best.len)) best = { id:e.id, len:a.length, at:i, surface:a };
     }
   }
@@ -471,6 +490,11 @@ function linkContext(atoms){
       a.actorId = curActor; a.kind = 'observation'; a.inherited.push('actorId');
     }
 
+    // 입·퇴실은 장소가 없으면 출입구로 둔다
+    if (!a.locationId && (a.predicate === '입실' || a.predicate === '퇴실') && LOCATION_SEED.L_DOOR){
+      a.locationId = 'L_DOOR'; a.inherited.push('locationId');
+    }
+
     curSent = a.parentSentenceId;
   });
   return atoms;
@@ -492,6 +516,9 @@ function assignPhases(atoms, phases){
   atoms.forEach(a => {
     if (a.predicate === '입실') a.phase = P[0];
     if (a.predicate === '퇴실') a.phase = P[P.length - 1];
+    // 서술 순서를 구간에 나눈 것일 뿐 동시성의 근거가 아니다.
+    // 사람이 확인하기 전까지는 물리 불가(R4) 판정에 쓰지 않는다.
+    a.phaseAuto = true;
   });
   return atoms;
 }
@@ -619,7 +646,9 @@ function deniesPresence(c){
 // 깎지 않기 위해 필요하다. 기본은 양쪽 동일.
 function mk(rule, a, b, why, tree, extra){
   const evidence = a.sourceType === 'evidence' || b.sourceType === 'evidence';
-  let sev = BASE[rule] * timeWeight(a, b) * (evidence ? 2 : 1);
+  // R9 는 구간이 어긋난 것 자체가 판정 내용이므로 시점일치로 깎지 않는다
+  const tw = rule === 'R9' ? 1 : timeWeight(a, b);
+  let sev = BASE[rule] * tw * (evidence ? 2 : 1);
   if (a.modality === 'hedge' || b.modality === 'hedge') sev *= 0.6;
   // 문맥에서 끌어온 슬롯 위에 세운 판정은 진술자가 직접 말한 것보다 약하게 잡는다
   const inferred = (a.inherited && a.inherited.length) || (b.inherited && b.inherited.length);
@@ -677,7 +706,8 @@ function detectConflicts(claims, model){
       if (same && assertsPresence(a) && assertsPresence(b) &&
           disjointZone(a.locationId, b.locationId, tree) &&
           ((hasTime(a) && hasTime(b) && overlapSec(a, b) >= 5) ||
-           (!hasTime(a) && !hasTime(b) && bothPhased(a, b, PHASES) && samePhase(a, b)))){
+           (!hasTime(a) && !hasTime(b) && bothPhased(a, b, PHASES) && samePhase(a, b) &&
+            !a.phaseAuto && !b.phaseAuto))){
         push(mk('R4', a, b, (hasTime(a) ? '겹치는 시각' : '같은 구간(' + a.phase + ')') +
           '에 서로 떨어진 두 구역에 있었다고 진술합니다.', tree));
       }
@@ -686,6 +716,7 @@ function detectConflicts(claims, model){
       if (!same && a.kind === 'state' && b.kind === 'state' &&
           a.polarity === 'yes' && b.polarity === 'yes' &&
           a.entityId && a.entityId === b.entityId &&
+          !isPersonal(a.entityId, model.entities) &&
           disjointZone(a.locationId, b.locationId, tree)){
         push(mk('R2', a, b,
           '같은 대상의 위치를 서로 다르게 진술합니다: ' +
@@ -774,6 +805,8 @@ function detectConflicts(claims, model){
       for (let j = i + 1; j < list.length; j++){
         const x = list[i], y = list[j];
         if (x.phase === y.phase) continue;
+        // 각자 자기 것을 다룬 행위는 화자가 다르면 같은 사건이 아니다
+        if (x.speaker !== y.speaker && isPersonal(x.entityId, model.entities)) continue;
         // 위치나 행위 모순으로 이미 잡힌 쌍이면 같은 불일치를 두 번 세지 않는다
         if (pairSeen.has([x.id, y.id].sort().join('|'))) continue;
         push(mk('R9', x, y,
@@ -820,8 +853,9 @@ function detectConflicts(claims, model){
     }
   }
 
-  found.sort((x, y) => y.sev - x.sev);
-  return { conflicts: found, gaps };
+  const kept = found.filter(c => c.sev > 0);
+  kept.sort((x, y) => y.sev - x.sev);
+  return { conflicts: kept, gaps };
 }
 
 /* ------------------------------------------------------------- 8. 점수 */
@@ -874,8 +908,13 @@ function scoreSpeaker(sp, claims, conflicts, model){
   }, 0) / n;
   const verif = mine.filter(c => c.verifiable).length / n;
   const timed = mine.filter(hasTime);
-  const meanLen = timed.length ? timed.reduce((s,c) => s + (c.endSec - c.startSec), 0) / timed.length : dur;
-  const prec = clamp(1 - meanLen / Math.max(1, dur), 0, 1) * (timed.length / n);
+  let prec;
+  if (timed.length){
+    const meanLen = timed.reduce((s, c) => s + (c.endSec - c.startSec), 0) / timed.length;
+    prec = clamp(1 - meanLen / Math.max(1, dur), 0, 1) * (timed.length / n);
+  } else {
+    prec = mine.filter(c => c.phase).length / n * 0.6;
+  }
   const S = clamp(100 * (slotFill * 0.4 + verif * 0.3 + prec * 0.3), 0, 100);
 
   // 개연성 — 타 화자·물증과의 충돌
@@ -1124,6 +1163,47 @@ function selftest(){
   ], M);
   ok('R6 설명 없는 구간', r.conflicts.some(c => c.rule === 'R6' && (c.missingPhases || []).length === 3));
 
+  /* --- 실제 데모 진술을 원문으로 돌려 드러난 것들 --- */
+
+  // 낱말 경계: '가방' 의 '방' 이 연구실로, '논문' 의 '문' 이 출입문으로 잡히면 안 된다
+  ok('별칭이 낱말 안쪽에서 잡히지 않음',
+     !resolveLocation('가방에 넣었습니다', LOCATION_SEED) &&
+     resolveEntity('논문 파일을 찾았습니다', ENTITY_SEED).id === 'E_FILE');
+  ok('낱말 앞에서는 정상 매칭',
+     resolveLocation('연구실에 들어와서', LOCATION_SEED).id === 'L_ROOM' &&
+     resolveLocation('소파 쪽에 내려놨습니다', LOCATION_SEED).id === 'L_SOFA');
+
+  ok('찾다·들다 술어', detectPredicate('충전기를 찾았습니다') === '확인' &&
+     detectPredicate('가방을 들고') === '획득');
+  ok('들어와서도 입실', detectPredicate('연구실에 들어와서') === '입실');
+
+  // 자동 배치된 구간은 동시성의 근거가 아니다
+  const auto = AT('문을 열고 소파 쪽에 가방을 내려놨습니다.');
+  ok('자동 배치는 phaseAuto 로 표시', auto.every(c => c.phaseAuto === true));
+  ok('자동 배치 구간으로는 R4 판정 안 함',
+     !detectConflicts(auto.map((c, i) => Object.assign(c, { id:'z' + i, approved:true })), M)
+        .conflicts.some(c => c.rule.indexOf('R4') === 0));
+
+  // 각자 자기 것인 물건은 화자 간 동일 사건이 아니다
+  ok('개인 소지품 판별', isPersonal('E_BAG', ENTITY_SEED) && !isPersonal('E_MONEY', ENTITY_SEED));
+  r = detectConflicts([
+    C({ id:'n1', speaker:'B', kind:'state', predicate:'목격', entityId:'E_BAG', locationId:'L_SOFA', scope:'session' },1),
+    C({ id:'n2', speaker:'C', kind:'state', predicate:'목격', entityId:'E_BAG', locationId:'L_CHAIR', scope:'session' },2)
+  ], M);
+  ok('내 가방 vs 네 가방은 R2 아님', !r.conflicts.some(c => c.rule.indexOf('R2') === 0));
+  r = detectConflicts([
+    C({ id:'n3', speaker:'B', predicate:'획득', entityId:'E_BAG', locationId:'L_SOFA', phase:'초반' },1),
+    C({ id:'n4', speaker:'C', predicate:'획득', entityId:'E_BAG', locationId:'L_CHAIR', phase:'후반' },2)
+  ], M);
+  ok('개인 소지품은 화자 간 R9 제외', !r.conflicts.some(c => c.rule.indexOf('R9') === 0));
+
+  // 근거 가중이 0 이면 판정이 아니다
+  r = detectConflicts([
+    C({ id:'y1', predicate:'확인', locationId:'L_WINDOW', phase:'초반' },1),
+    C({ id:'y2', predicate:'접촉', locationId:'L_DESK',   phase:'후반' },2)
+  ], M);
+  ok('심각도 0 은 내보내지 않음', r.conflicts.every(c => c.sev > 0));
+
   // R7 물증 가중
   r = detectConflicts([
     C({ id:'e1', kind:'denial', predicate:'이동', locationId:'L_DESK', polarity:'no', scope:'session' },1),
@@ -1142,7 +1222,7 @@ root.FT = {
   assignPhases, phaseFromSec, samePhase, phaseIndex,
   normKo, jaccard, bigrams,
   sameZone, disjointZone, ancestry,
-  resolveLocation, resolveEntity, suggestEntities,
+  resolveLocation, resolveEntity, suggestEntities, isPersonal,
   splitSentences, splitClauses, detectPredicate, detectActor, atomize,
   hasTime, overlapSec, overlapRatio, coverage,
   detectConflicts, scoreSpeaker, analyze, upgradeClaim, selftest
