@@ -85,6 +85,24 @@ textarea:focus{outline:none;border-color:var(--ink)}
 .tray{border:1px solid var(--flag);padding:14px 16px;margin-bottom:22px}
 .tray .r{display:flex;gap:10px;align-items:center;padding:5px 0;flex-wrap:wrap}
 
+/* timeline */
+#phedit{margin-bottom:20px}
+#phedit input{border-bottom:1px solid var(--rule);padding:3px 0;width:74px;
+  font-family:var(--mono);font-size:11px;text-align:center}
+#phedit input:focus{outline:none;border-bottom-color:var(--ink)}
+#tl{overflow-x:auto}
+.tlg{display:grid;min-width:660px}
+.tlg>div{padding:9px 8px;border-top:1px solid var(--rule)}
+.tlg .hd{border-top:0;padding-bottom:11px}
+.tlg .who{font-size:18px;letter-spacing:-.01em}
+.tlg .cell{min-height:46px}
+.tlg .cell.gap{background:var(--faint)}
+.chip{display:inline-block;font-family:var(--mono);font-size:10px;letter-spacing:.04em;
+  border:1px solid var(--rule);padding:1px 5px;margin:0 3px 3px 0}
+.chip.hot{border-color:var(--flag);color:var(--flag)}
+.chip.ev{border-style:dashed}
+.dash{color:var(--flag);font-family:var(--mono);font-size:11px}
+
 /* conflicts */
 .cf{border-top:1px solid var(--rule);padding:18px 0}
 .cf:last-child{border-bottom:1px solid var(--rule)}
@@ -136,6 +154,7 @@ textarea:focus{outline:none;border-color:var(--ink)}
     <div id="tabs">
       <button data-v="ingest" aria-selected="true">Ingest</button>
       <button data-v="atoms" aria-selected="false">Atoms<span class="n" id="n-atoms">0</span></button>
+      <button data-v="timeline" aria-selected="false">Timeline</button>
       <button data-v="conflict" aria-selected="false">Conflict<span class="n" id="n-cf">0</span></button>
       <button data-v="assess" aria-selected="false">Assess</button>
     </div>
@@ -157,8 +176,6 @@ textarea:focus{outline:none;border-color:var(--ink)}
         <datalist id="dl-speakers"></datalist>
         <label class="field"><span class="lbl">회차</span>
           <select id="i-round"><option>1</option><option>2</option><option>3</option></select></label>
-        <label class="field"><span class="lbl">사건 길이 (초)</span>
-          <input id="i-dur" type="number" min="1" value="300"></label>
         <label class="field"><span class="lbl">출처</span>
           <select id="i-src"><option value="statement">진술</option><option value="evidence">물증</option></select></label>
       </div>
@@ -174,6 +191,12 @@ textarea:focus{outline:none;border-color:var(--ink)}
       <div id="sum"></div>
       <div id="tray"></div>
       <div id="atoms"></div>
+    </section>
+
+    <section id="v-timeline" hidden>
+      <h2>Timeline</h2>
+      <div id="phedit" class="row"></div>
+      <div id="tl"></div>
     </section>
 
     <section id="v-conflict" hidden>
@@ -261,6 +284,10 @@ const RE_TIME  = /\d{1,2}\s*시\s*\d{0,2}\s*분?|\d{1,2}\s*:\s*\d{1,2}|\d{1,3}\s
 const CLAUSE_TAIL = /(?:가서|와서|아서|어서|해서|고서|고는|면서|자마자|다가|길래|느라|는데|지만|으나|나서|[ㄴ은한는]\s*(?:다음|뒤|후)에?|고)(?=\s)/g;
 // 접속 부사는 어느 절에도 속하지 않으므로 통째로 들어낸다.
 const CLAUSE_ADV = /(?:그리고|그다음에?|그\s*다음에?|그러고는?|그런\s*다음|그\s*후에?|그\s*뒤에?|그리곤|이후에)\s*/g;
+
+// 사건 전체 타임라인. 초 단위 대신 이 구간이 시간의 단위다.
+// 진술에서 초를 지어낼 수 없으므로 굵게 나누고 사람이 손으로 옮긴다.
+const PHASE_SEED = ['입실', '초반', '중반', '후반', '퇴실'];
 
 // 앞선 원자를 가리키는 지시 표현
 const PRON_LOC = /거기|그곳|여기|이곳|그\s*자리|같은\s*자리|그\s*쪽|그쪽|거기서/;
@@ -449,6 +476,34 @@ function linkContext(atoms){
   return atoms;
 }
 
+/*
+ * 서술 순서를 전체 타임라인의 구간에 얹는다. 초를 지어내지 않고도 R4·R6·R9 가 돌게
+ * 하는 최소 장치이며, 배치가 틀리면 화면에서 구간을 바꾸면 된다.
+ */
+function assignPhases(atoms, phases){
+  const P = (phases && phases.length) ? phases : PHASE_SEED;
+  const mid = P.length > 2 ? P.slice(1, P.length - 1) : P;
+  const body = atoms.filter(a => a.predicate !== '입실' && a.predicate !== '퇴실');
+  atoms.forEach((a, i) => { a.seq = i; });
+  body.forEach((a, i) => {
+    const k = body.length <= 1 ? 0 : Math.floor(i * mid.length / body.length);
+    a.phase = mid[Math.min(k, mid.length - 1)] || P[0];
+  });
+  atoms.forEach(a => {
+    if (a.predicate === '입실') a.phase = P[0];
+    if (a.predicate === '퇴실') a.phase = P[P.length - 1];
+  });
+  return atoms;
+}
+
+// 구버전 데이터에만 있는 초를 구간으로 옮겨 적는다
+function phaseFromSec(c, duration, phases){
+  const P = (phases && phases.length) ? phases : PHASE_SEED;
+  if (!hasTime(c)) return '';
+  const k = Math.floor((c.startSec + c.endSec) / 2 / Math.max(1, duration) * P.length);
+  return P[Math.min(P.length - 1, Math.max(0, k))];
+}
+
 function atomize(text, ctx){
   const tree = ctx.locations, reg = ctx.entities;
   const speakers = (ctx.speakers || []).filter(s => s !== ctx.speaker);
@@ -477,6 +532,7 @@ function atomize(text, ctx){
       out.push({
         timeHint: tm ? tm[0] : sentTime,
         id: null, speaker: ctx.speaker, round: ctx.round, parentSentenceId: sid,
+        phase: '', seq: 0,
         quote: cl, kind, predicate: predicate || '',
         entityId: ent ? ent.id : '', entityText: ent ? ent.surface : '',
         locationId: loc ? loc.id : '', locationText: loc ? loc.surface : '',
@@ -492,12 +548,18 @@ function atomize(text, ctx){
       });
     });
   });
-  return linkContext(out);
+  return assignPhases(linkContext(out), ctx.phases);
 }
 
 /* ---------------------------------------------------------- 6. 시간 구간 */
 
 function hasTime(c){ return c.startSec != null && c.endSec != null && c.endSec > c.startSec; }
+
+function phaseIndex(p, phases){ return (phases || PHASE_SEED).indexOf(p); }
+function samePhase(a, b){ return !!a.phase && a.phase === b.phase; }
+function bothPhased(a, b, phases){
+  return phaseIndex(a.phase, phases) >= 0 && phaseIndex(b.phase, phases) >= 0;
+}
 
 function overlapSec(a, b){
   if (!hasTime(a) || !hasTime(b)) return 0;
@@ -508,16 +570,21 @@ function overlapRatio(a, b){
   if (!ov) return 0;
   return ov / Math.min(a.endSec - a.startSec, b.endSec - b.startSec);
 }
-// 시간이 겹치거나, 한쪽이라도 세션 전체 주장이면 비교 대상이다.
+// detectConflicts 안에서만 쓰이는 현재 사건의 구간 목록
+let PHASES = PHASE_SEED;
+
+// 초가 있으면 초로, 없으면 구간으로 견준다. 둘 다 없으면 판단을 보류하고 비교는 해 둔다.
 function comparable(a, b){
   if (a.scope === 'session' || b.scope === 'session') return true;
-  if (!hasTime(a) || !hasTime(b)) return true;
-  return overlapSec(a, b) > 0;
+  if (hasTime(a) && hasTime(b)) return overlapSec(a, b) > 0;
+  if (bothPhased(a, b, PHASES)) return samePhase(a, b);
+  return true;
 }
 function timeWeight(a, b){
   if (a.scope === 'session' || b.scope === 'session') return 1;
-  if (!hasTime(a) || !hasTime(b)) return 0.6;            // 시간 미상은 감점된 확신
-  return Math.max(0.25, overlapRatio(a, b));
+  if (hasTime(a) && hasTime(b)) return Math.max(0.25, overlapRatio(a, b));
+  if (bothPhased(a, b, PHASES)) return samePhase(a, b) ? 0.85 : 0;  // 구간은 초보다 거칠다
+  return 0.6;                                                       // 시간 정보 자체가 없음
 }
 
 function mergeIntervals(list){
@@ -538,7 +605,7 @@ function coverage(list, duration){
 
 /* ------------------------------------------------------------- 7. 규칙 */
 
-const BASE = { R1a:1.0, R1b:1.0, R2:1.0, R3:1.0, R4:0.9, R5:0.5, R6:0.5 };
+const BASE = { R1a:1.0, R1b:1.0, R2:1.0, R3:1.0, R4:0.9, R5:0.5, R6:0.5, R9:0.7 };
 
 function assertsPresence(c){
   return (c.kind === 'action') && c.locationId && PRESENCE.has(c.predicate) && c.polarity === 'yes';
@@ -569,12 +636,14 @@ function mk(rule, a, b, why, tree, extra){
 
 function detectConflicts(claims, model){
   const tree = model.locations, dur = model.duration;
+  PHASES = (model.phases && model.phases.length) ? model.phases : PHASE_SEED;
   const cs = claims.filter(c => c.approved !== false);
-  const found = [], seen = new Set();
+  const found = [], seen = new Set(), pairSeen = new Set();
+  const pairKey = c => [c.a.id, c.b.id].sort().join('|');
   const push = c => {
-    const k = c.rule + '|' + [c.a.id, c.b.id].sort().join('|');
+    const k = c.rule + '|' + pairKey(c);
     if (seen.has(k)) return;
-    seen.add(k); found.push(c);
+    seen.add(k); pairSeen.add(pairKey(c)); found.push(c);
   };
 
   for (let i = 0; i < cs.length; i++){
@@ -602,11 +671,15 @@ function detectConflicts(claims, model){
         if (target) push(mk('R1b', a, b, '동일한 대상에 대한 ‘' + a.predicate + '’ 진술의 극성이 뒤집혔습니다.', tree));
       }
 
-      /* R4 물리 불가 — 같은 사람이 겹치는 시각에 서로 떨어진 구역에 */
+      /* R4 물리 불가 — 같은 사람이 한 시점에 서로 떨어진 구역에.
+         초가 있으면 실제 겹침을, 없으면 같은 구간을 근거로 삼는다. 구간은 거칠어서
+         그 안에서 걸어 이동했을 수 있으므로 심각도가 저절로 낮게 잡힌다. */
       if (same && assertsPresence(a) && assertsPresence(b) &&
           disjointZone(a.locationId, b.locationId, tree) &&
-          hasTime(a) && hasTime(b) && overlapSec(a, b) >= 5){
-        push(mk('R4', a, b, '겹치는 시각에 서로 떨어진 두 구역에 있었다고 진술합니다.', tree));
+          ((hasTime(a) && hasTime(b) && overlapSec(a, b) >= 5) ||
+           (!hasTime(a) && !hasTime(b) && bothPhased(a, b, PHASES) && samePhase(a, b)))){
+        push(mk('R4', a, b, (hasTime(a) ? '겹치는 시각' : '같은 구간(' + a.phase + ')') +
+          '에 서로 떨어진 두 구역에 있었다고 진술합니다.', tree));
       }
 
       /* R2 교차 화자 위치 모순 — 같은 물건을 서로 다른 구역에 둔다 */
@@ -635,7 +708,8 @@ function detectConflicts(claims, model){
           }
           if (obs.locationId && assertsPresence(own) &&
               disjointZone(obs.locationId, own.locationId, tree) &&
-              hasTime(obs) && hasTime(own) && overlapSec(obs, own) >= 5){
+              ((hasTime(obs) && hasTime(own) && overlapSec(obs, own) >= 5) ||
+               (!hasTime(obs) && !hasTime(own) && bothPhased(obs, own, PHASES) && samePhase(obs, own)))){
             push(witnessBlame(mk('R3', obs, own,
               '같은 시각에 대해 목격 위치와 본인 진술 위치가 서로 떨어져 있습니다.', tree)));
           }
@@ -681,23 +755,67 @@ function detectConflicts(claims, model){
     }
   }
 
-  /* R6 미설명 시간 */
+  /* R9 순서 모순 — 같은 사건을 서로 다른 구간에 놓는다.
+     초가 없어도 도는 규칙이라 붙여넣기만 한 진술에서도 동작한다.
+     한 사람이 한 회차에 같은 행위를 여러 번 말할 수 있으므로
+     (문 여러 번 드나들기) 회차·화자별 첫 등장만 견준다. */
+  const firstByKey = {};
+  // 세션 전체를 뜻하는 진술은 특정 구간에 속하지 않으므로 순서를 따지지 않는다
+  cs.filter(c => c.polarity === 'yes' && c.scope !== 'session' &&
+                 phaseIndex(c.phase, PHASES) >= 0).forEach(c => {
+    const key = (c.predicate || '?') + '·' + (c.entityId || c.locationId || '?');
+    const owner = c.speaker + '#' + c.round;
+    const slot = firstByKey[key] = firstByKey[key] || {};
+    if (!slot[owner]) slot[owner] = c;
+  });
+  for (const key in firstByKey){
+    const list = Object.keys(firstByKey[key]).map(k => firstByKey[key][k]);
+    for (let i = 0; i < list.length; i++){
+      for (let j = i + 1; j < list.length; j++){
+        const x = list[i], y = list[j];
+        if (x.phase === y.phase) continue;
+        // 위치나 행위 모순으로 이미 잡힌 쌍이면 같은 불일치를 두 번 세지 않는다
+        if (pairSeen.has([x.id, y.id].sort().join('|'))) continue;
+        push(mk('R9', x, y,
+          '같은 사건을 서로 다른 구간에 놓습니다: ' + x.phase + ' ↔ ' + y.phase, tree));
+      }
+    }
+  }
+
+  /* R6 설명되지 않은 구간 — 초가 있으면 초로, 없으면 구간 단위로 센다 */
   const bySpeaker = {};
   cs.forEach(c => { (bySpeaker[c.speaker] = bySpeaker[c.speaker] || []).push(c); });
   const gaps = {};
   for (const sp in bySpeaker){
-    const timed = bySpeaker[sp].filter(hasTime);
-    if (!timed.length){ gaps[sp] = 0; continue; }
-    const cov = coverage(timed, dur);
-    gaps[sp] = cov.gap;
-    if (cov.gap > 0){
-      const sev = Math.min(1, cov.gap / Math.max(1, dur) * 3);
+    const mine = bySpeaker[sp];
+    const timed = mine.filter(hasTime);
+
+    if (timed.length){
+      const cov = coverage(timed, dur);
+      gaps[sp] = cov.gap;
+      if (cov.gap > 0){
+        found.push({
+          rule:'R6', severity: cov.gap > 60 ? 'hard' : 'medium',
+          sev: Math.round(Math.min(1, cov.gap / Math.max(1, dur) * 3) * 100) / 100,
+          a: timed[0], b: timed[timed.length - 1], speakers:[sp],
+          why: dur + '초 중 ' + cov.gap + '초가 어떤 진술로도 채워지지 않았습니다.',
+          gapOnly: true
+        });
+      }
+      continue;
+    }
+
+    gaps[sp] = 0;
+    const filled = new Set(mine.map(c => c.phase).filter(p => phaseIndex(p, PHASES) >= 0));
+    if (!filled.size) continue;                       // 구간 배치 자체가 안 된 화자는 넘어간다
+    const missing = PHASES.filter(p => !filled.has(p));
+    if (missing.length){
       found.push({
-        rule:'R6', severity: cov.gap > 60 ? 'hard' : 'medium',
-        sev: Math.round(sev * 100) / 100,
-        a: timed[0], b: timed[timed.length - 1], speakers:[sp],
-        why: dur + '초 중 ' + cov.gap + '초가 어떤 진술로도 채워지지 않았습니다.',
-        gapOnly: true
+        rule:'R6', severity: missing.length > 1 ? 'medium' : 'soft',
+        sev: Math.round(Math.min(1, missing.length / PHASES.length * 2) * 100) / 100,
+        a: mine[0], b: mine[mine.length - 1], speakers:[sp],
+        why: '설명이 없는 구간: ' + missing.join(' · '),
+        gapOnly: true, missingPhases: missing
       });
     }
   }
@@ -751,7 +869,7 @@ function scoreSpeaker(sp, claims, conflicts, model){
   const slotFill = mine.reduce((s, c) => {
     let f = 0;
     if (c.predicate) f++; if (c.entityId) f++; if (c.locationId) f++;
-    if (hasTime(c)) f++; if (c.quote) f++;
+    if (hasTime(c) || c.phase) f++; if (c.quote) f++;
     return s + f / 5;
   }, 0) / n;
   const verif = mine.filter(c => c.verifiable).length / n;
@@ -793,7 +911,8 @@ function scoreSpeaker(sp, claims, conflicts, model){
 }
 
 function analyze(claims, model){
-  const m = Object.assign({ locations: LOCATION_SEED, entities: ENTITY_SEED, duration: 300 }, model || {});
+  const m = Object.assign({ locations: LOCATION_SEED, entities: ENTITY_SEED,
+                            duration: 300, phases: PHASE_SEED }, model || {});
   const det = detectConflicts(claims, m);
   m.gaps = det.gaps;
   const speakers = Array.from(new Set(claims.map(c => c.speaker))).sort();
@@ -805,7 +924,14 @@ function analyze(claims, model){
 /* ---------------------------------------------- 9. 구버전 JSON 하위 호환 */
 
 function upgradeClaim(c, model){
-  if (c.kind && c.predicate !== undefined) return c;          // 이미 신형
+  // 이미 신형이어도 구간·순서는 비어 있을 수 있으므로 그것만 채워 준다
+  if (c.kind && c.predicate !== undefined){
+    return Object.assign({}, c, {
+      phase: c.phase || phaseFromSec(c, model.duration || 300, model.phases),
+      seq: c.seq == null ? 0 : c.seq,
+      inherited: c.inherited || []
+    });
+  }
   const tree = model.locations, reg = model.entities;
   const src = [c.action, c.object, c.location, c.quote].filter(Boolean).join(' ');
   const predicate = detectPredicate(c.action || c.quote || '') || detectPredicate(src) || '';
@@ -823,6 +949,8 @@ function upgradeClaim(c, model){
     actorId: '', modality: RE_HEDGE.test(c.quote || '') ? 'hedge' : 'assert',
     scope: kind === 'denial' ? 'session' : 'interval',
     startSec: c.startSec ?? null, endSec: c.endSec ?? null,
+    phase: c.phase || phaseFromSec(c, model.duration || 300, model.phases),
+    seq: c.seq == null ? 0 : c.seq, inherited: c.inherited || [],
     parentSentenceId: c.parentSentenceId || ''
   });
 }
@@ -947,6 +1075,55 @@ function selftest(){
   ], M);
   ok('R6 미설명 50초 회귀', r.gaps.B === 50);
 
+  // 구간 배치 — 입·퇴실은 타임라인 양 끝에 고정된다
+  const ph = assignPhases(AT('연구실에 들어갔습니다. 창가로 갔습니다. 상자를 확인했습니다. 그대로 나왔습니다.'), PHASE_SEED);
+  ok('입·퇴실은 타임라인 양 끝', ph[0].phase === PHASE_SEED[0] &&
+     ph[ph.length - 1].phase === PHASE_SEED[PHASE_SEED.length - 1]);
+  ok('나머지는 서술 순서대로 배치', ph.every(c => PHASE_SEED.indexOf(c.phase) >= 0) &&
+     ph.every((c, i) => i === 0 || PHASE_SEED.indexOf(c.phase) >= PHASE_SEED.indexOf(ph[i-1].phase)));
+
+  // R9 교차 화자 순서 모순 — 초가 없어도 돈다
+  r = detectConflicts([
+    C({ id:'q1', speaker:'A', predicate:'개폐', entityId:'E_DRAWER', locationId:'L_DRAWER', phase:'초반' },1),
+    C({ id:'q2', speaker:'B', predicate:'개폐', entityId:'E_DRAWER', locationId:'L_DRAWER', phase:'후반' },2)
+  ], M);
+  ok('R9 교차 화자 순서 모순', r.conflicts.some(c => c.rule.indexOf('R9') === 0));
+
+  // R9 회차 간 사건 이동
+  r = detectConflicts([
+    C({ id:'w1', speaker:'A', round:1, predicate:'획득', entityId:'E_FILE', locationId:'L_SHELF', phase:'초반' },1),
+    C({ id:'w2', speaker:'A', round:2, predicate:'획득', entityId:'E_FILE', locationId:'L_SHELF', phase:'후반' },2)
+  ], M);
+  ok('R9 회차 간 사건 이동', r.conflicts.some(c => c.rule.indexOf('R9') === 0));
+
+  // 같은 사건을 여러 번 말하는 것 자체는 모순이 아니다
+  r = detectConflicts([
+    C({ id:'w3', speaker:'A', round:1, predicate:'이동', locationId:'L_DOOR', phase:'입실' },1),
+    C({ id:'w4', speaker:'A', round:1, predicate:'이동', locationId:'L_DOOR', phase:'퇴실' },2)
+  ], M);
+  ok('한 회차 안 반복은 R9 아님', !r.conflicts.some(c => c.rule.indexOf('R9') === 0));
+
+  // 세션 전체 진술은 특정 구간에 속하지 않는다
+  r = detectConflicts([
+    C({ id:'w5', speaker:'A', predicate:'목격', entityId:'E_MONEY', locationId:'L_DRAWER', phase:'초반', scope:'session' },1),
+    C({ id:'w6', speaker:'B', predicate:'목격', entityId:'E_MONEY', locationId:'L_DRAWER', phase:'후반', scope:'session' },2)
+  ], M);
+  ok('세션 진술은 R9 제외', !r.conflicts.some(c => c.rule.indexOf('R9') === 0));
+
+  // R4 초 없이 구간만으로
+  r = detectConflicts([
+    C({ id:'v1', predicate:'확인', locationId:'L_WINDOW', phase:'중반' },1),
+    C({ id:'v2', predicate:'접촉', locationId:'L_DESK',   phase:'중반' },2)
+  ], M);
+  ok('R4 구간 기반 판정', r.conflicts.some(c => c.rule.indexOf('R4') === 0 && c.severity !== 'hard'));
+
+  // R6 구간 공백
+  r = detectConflicts([
+    C({ speaker:'D', id:'u1', predicate:'입실', locationId:'L_DOOR', phase:'입실' },1),
+    C({ speaker:'D', id:'u2', predicate:'확인', locationId:'L_CHAIR', phase:'초반' },2)
+  ], M);
+  ok('R6 설명 없는 구간', r.conflicts.some(c => c.rule === 'R6' && (c.missingPhases || []).length === 3));
+
   // R7 물증 가중
   r = detectConflicts([
     C({ id:'e1', kind:'denial', predicate:'이동', locationId:'L_DESK', polarity:'no', scope:'session' },1),
@@ -961,7 +1138,8 @@ function selftest(){
 }
 
 root.FT = {
-  LOCATION_SEED, ENTITY_SEED, PREDICATES, PRESENCE, STATEP,
+  LOCATION_SEED, ENTITY_SEED, PHASE_SEED, PREDICATES, PRESENCE, STATEP,
+  assignPhases, phaseFromSec, samePhase, phaseIndex,
   normKo, jaccard, bigrams,
   sameZone, disjointZone, ancestry,
   resolveLocation, resolveEntity, suggestEntities,
@@ -985,6 +1163,7 @@ const KEY = 'facttrace.v2';
 const state = {
   claims: [],
   duration: 300,
+  phases: FT.PHASE_SEED.slice(),
   locations: JSON.parse(JSON.stringify(FT.LOCATION_SEED)),
   entities: JSON.parse(JSON.stringify(FT.ENTITY_SEED)),
   view: 'ingest',
@@ -994,7 +1173,8 @@ const state = {
 /* ---- persistence ---- */
 function save(){
   try { localStorage.setItem(KEY, JSON.stringify({
-    claims: state.claims, duration: state.duration, entities: state.entities, seq: state.seq
+    claims: state.claims, duration: state.duration, entities: state.entities,
+    phases: state.phases, seq: state.seq
   })); } catch (e) {}
 }
 function load(){
@@ -1003,10 +1183,12 @@ function load(){
     const d = JSON.parse(raw);
     state.claims = d.claims || []; state.duration = d.duration || 300;
     state.entities = d.entities || state.entities; state.seq = d.seq || state.claims.length;
+    state.phases = (d.phases && d.phases.length) ? d.phases : state.phases;
   } catch (e) {}
 }
 
-function model(){ return { locations: state.locations, entities: state.entities, duration: state.duration }; }
+function model(){ return { locations: state.locations, entities: state.entities,
+                           duration: state.duration, phases: state.phases }; }
 function nextId(sp){
   const n = state.claims.filter(c => c.speaker === sp).length + 1;
   return sp + n;
@@ -1017,7 +1199,7 @@ function speakers(){ return Array.from(new Set(state.claims.map(c => c.speaker))
 function show(v){
   state.view = v;
   document.querySelectorAll('#tabs button').forEach(b => b.setAttribute('aria-selected', String(b.dataset.v === v)));
-  ['ingest','atoms','conflict','assess'].forEach(k => { $('#v-' + k).hidden = (k !== v); });
+  ['ingest','atoms','timeline','conflict','assess'].forEach(k => { $('#v-' + k).hidden = (k !== v); });
   render();
 }
 
@@ -1031,6 +1213,7 @@ function render(){
   $('#n-cf').textContent = a.conflicts.length;
   $('#dl-speakers').innerHTML = speakers().map(s => '<option value="' + esc(s) + '">').join('');
   if (state.view === 'atoms') renderAtoms();
+  if (state.view === 'timeline') renderTimeline(a);
   if (state.view === 'conflict') renderConflicts(a);
   if (state.view === 'assess') renderAssess(a);
   save();
@@ -1057,18 +1240,17 @@ function sel(cls, val, pairs, on){
 function renderAtoms(){
   // 사람이 손대야 하는 것부터 세어 보여준다
   const sum = $('#sum'); sum.innerHTML = '';
-  const noTime = state.claims.filter(c => !FT.hasTime(c)).length;
+  const noPhase = state.claims.filter(c => !c.phase).length;
   const inf = state.claims.filter(c => c.inherited && c.inherited.length).length;
   const noSlot = state.claims.filter(c => !c.predicate || (!c.entityId && !c.locationId)).length;
   [['원자', state.claims.length, false],
    ['문맥 추론', inf, inf > 0],
-   ['시간 미지정', noTime, noTime > 0],
+   ['구간 미배치', noPhase, noPhase > 0],
    ['슬롯 미완', noSlot, noSlot > 0]
   ].forEach(x => {
     const d = el('div', 'lbl' + (x[2] ? ' warn' : ''), x[0] + ' ' + x[1]);
     sum.appendChild(d);
   });
-  if (noTime) sum.appendChild(el('div','lbl','시간을 채워야 R4·R6가 동작합니다'));
 
   const tray = $('#tray'); tray.innerHTML = '';
   const un = state.claims.filter(c => c.unresolved && !c.entityId);
@@ -1107,8 +1289,8 @@ function renderAtoms(){
     const n = el('div','atom');
     const h = el('div','head');
     h.appendChild(el('span','lbl', c.id + ' · ' + c.speaker + ' · ' + c.round + '차'));
-    if (!FT.hasTime(c)) h.appendChild(el('span','lbl warn',
-      '시간 미지정' + (c.timeHint ? ' · 힌트 ' + c.timeHint : '')));
+    if (!c.phase) h.appendChild(el('span','lbl warn','구간 미배치'));
+    if (c.timeHint) h.appendChild(el('span','lbl','원문 시간 ' + c.timeHint));
     if (c.inherited && c.inherited.length) h.appendChild(el('span','lbl warn','문맥 추론'));
     const del = el('button','del','삭제');
     del.onclick = () => { state.claims = state.claims.filter(x => x !== c); render(); };
@@ -1163,12 +1345,14 @@ function renderAtoms(){
     s.appendChild(sel(null, c.scope, OPT.scope, v => { c.scope = v; render(); }));
     s.appendChild(sel(null, c.sourceType, OPT.sourceType, v => { c.sourceType = v; render(); }));
 
-    [['startSec','시작'],['endSec','끝']].forEach(f => {
-      const i = el('input'); i.type = 'number'; i.min = 0; i.placeholder = f[1];
-      i.value = c[f[0]] == null ? '' : c[f[0]];
-      i.onchange = () => { c[f[0]] = i.value === '' ? null : Number(i.value); render(); };
-      s.appendChild(i);
+    // 타임라인 배치. 초 대신 이것으로 시점을 다룬다.
+    const phs = el('select', c.phase ? null : 'inf');
+    [['', '구간 미배치']].concat(state.phases.map(p => [p, p])).forEach(p => {
+      const o = el('option', null, p[1]); o.value = p[0];
+      if ((c.phase || '') === p[0]) o.selected = true; phs.appendChild(o);
     });
+    phs.onchange = () => { c.phase = phs.value; render(); };
+    s.appendChild(phs);
 
     const vf = el('label','lbl');
     const vb = el('input'); vb.type = 'checkbox'; vb.checked = !!c.verifiable;
@@ -1179,6 +1363,70 @@ function renderAtoms(){
     n.appendChild(s);
     host.appendChild(n);
   });
+}
+
+function renderTimeline(a){
+  const pe = $('#phedit'); pe.innerHTML = '';
+  pe.appendChild(el('span','lbl','구간'));
+  state.phases.forEach((p, i) => {
+    const inp = el('input'); inp.value = p;
+    inp.onchange = () => {
+      const old = state.phases[i], nu = inp.value.trim() || old;
+      state.claims.forEach(c => { if (c.phase === old) c.phase = nu; });
+      state.phases[i] = nu; render();
+    };
+    pe.appendChild(inp);
+  });
+  const add = el('button','ghost','구간 추가');
+  add.onclick = () => { state.phases.push('구간' + (state.phases.length + 1)); render(); };
+  pe.appendChild(add);
+  if (state.phases.length > 2){
+    const rm = el('button','ghost','마지막 삭제');
+    rm.onclick = () => {
+      const gone = state.phases.pop();
+      state.claims.forEach(c => { if (c.phase === gone) c.phase = ''; });
+      render();
+    };
+    pe.appendChild(rm);
+  }
+
+  const host = $('#tl'); host.innerHTML = '';
+  const sps = speakers();
+  if (!sps.length){ host.appendChild(el('div','empty','진술이 없습니다.')); return; }
+
+  // 모순에 얽힌 원자를 표시하기 위해 id 를 모아 둔다
+  const hot = new Set();
+  a.conflicts.forEach(c => { if (!c.gapOnly){ hot.add(c.a.id); hot.add(c.b.id); } });
+
+  const g = el('div','tlg');
+  g.style.gridTemplateColumns = '58px repeat(' + state.phases.length + ', minmax(96px, 1fr))';
+  g.appendChild(el('div','hd'));
+  state.phases.forEach(p => g.appendChild(el('div','hd lbl', p)));
+
+  sps.forEach(sp => {
+    g.appendChild(el('div','who', sp));
+    state.phases.forEach(p => {
+      const cell = el('div','cell');
+      const here = state.claims.filter(c => c.speaker === sp && c.phase === p);
+      if (!here.length){ cell.className = 'cell gap'; cell.appendChild(el('span','dash','—')); }
+      else here.forEach(c => {
+        const ch = el('span','chip' + (hot.has(c.id) ? ' hot' : '') +
+                              (c.sourceType === 'evidence' ? ' ev' : ''), c.id);
+        ch.title = c.quote;
+        cell.appendChild(ch);
+      });
+      g.appendChild(cell);
+    });
+  });
+  host.appendChild(g);
+
+  const unplaced = state.claims.filter(c => !c.phase);
+  if (unplaced.length){
+    const u = el('div','lbl warn');
+    u.style.marginTop = '18px';
+    u.textContent = '구간 미배치 ' + unplaced.length + ' · ' + unplaced.map(c => c.id).join(' ');
+    host.appendChild(u);
+  }
 }
 
 function renderConflicts(a){
@@ -1261,12 +1509,11 @@ function renderAssess(a){
 $('#b-atomize').onclick = () => {
   const text = $('#i-text').value.trim();
   if (!text) return;
-  state.duration = Number($('#i-dur').value) || 300;
   const sp = $('#i-speaker').value.trim() || 'A';
   const proposals = FT.atomize(text, {
     speaker: sp, round: Number($('#i-round').value),
     sourceType: $('#i-src').value,
-    locations: state.locations, entities: state.entities,
+    locations: state.locations, entities: state.entities, phases: state.phases,
     speakers: Array.from(new Set(speakers().concat([sp])))
   });
   proposals.forEach(p => { p.id = nextId(sp); p.approved = true; state.claims.push(p); });
@@ -1279,7 +1526,8 @@ $('#b-export').onclick = () => {
   const a = recompute();
   const blob = new Blob([JSON.stringify({
     exportedAt: new Date().toISOString(), version: 2,
-    duration: state.duration, entities: state.entities, locations: state.locations,
+    duration: state.duration, phases: state.phases,
+    entities: state.entities, locations: state.locations,
     claims: state.claims, analysis: { conflicts: a.conflicts, scores: a.scores, gaps: a.gaps }
   }, null, 2)], { type: 'application/json' });
   const u = URL.createObjectURL(blob);
@@ -1298,16 +1546,15 @@ $('#f-import').onchange = e => {
 
 function ingestJSON(text){
   let d; try { d = JSON.parse(text); } catch (err) { alert('JSON 파싱 실패'); return; }
+  if (d.phases && d.phases.length) state.phases = d.phases;
   if (d.entities) state.entities = d.entities;
   if (d.locations) state.locations = d.locations;
   if (d.duration) state.duration = d.duration;
   const raw = d.claims || [];
   state.claims = raw.map(c => FT.upgradeClaim(c, model()));
   if (!d.duration){
-    const mx = Math.max.apply(null, state.claims.map(c => c.endSec || 0).concat([300]));
-    state.duration = mx;
+    state.duration = Math.max.apply(null, state.claims.map(c => c.endSec || 0).concat([300]));
   }
-  $('#i-dur').value = state.duration;
   show('atoms');
 }
 
@@ -1323,10 +1570,8 @@ $('#b-sample').onclick = () => {
 };
 
 document.querySelectorAll('#tabs button').forEach(b => { b.onclick = () => show(b.dataset.v); });
-$('#i-dur').onchange = () => { state.duration = Number($('#i-dur').value) || 300; render(); };
 
 load();
-$('#i-dur').value = state.duration;
 show(state.claims.length ? 'atoms' : 'ingest');
 window.__selftest = FT.selftest;
 })();
